@@ -1,0 +1,5 @@
+{
+  "name": "ScreenGuide AI",
+  "description": "An AI-powered tool that automatically generates step-by-step guides and instructions from screenshots. Save, edit, and export your visual guides as DOCX or PDF.",
+  "requestFramePermissions": []
+}
