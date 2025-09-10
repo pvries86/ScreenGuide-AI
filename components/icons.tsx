@@ -28,15 +28,30 @@ export const GenerateIcon: React.FC = () => (
     </svg>
 );
 
+export const MergeIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="18" r="3"></circle>
+        <circle cx="6" cy="6" r="3"></circle>
+        <path d="M6 9v6a3 3 0 0 0 3 3h3"></path>
+        <path d="M18 9V6a3 3 0 0 0-3-3H9"></path>
+    </svg>
+);
+
 export const DocxIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M2 15.63V18a2 2 0 0 0 2 2h2.37"/><path d="m10 18-3.13-3.13a.5.5 0 0 0-.71 0l-1.21 1.21a.5.5 0 0 0 0 .71l3.13 3.13a.5.5 0 0 0 .71 0l1.21-1.21a.5.5 0 0 0 0-.71z"/>
+    <svg width="16" height="16" fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 31.519 31.519">
+        <g>
+            <path d="M11.184,0L3.021,8.619v22.9h25.477V0H11.184z M10.463,3.624v3.819H6.847L10.463,3.624z M26.528,29.55H4.991V9.413h7.443 V1.97h14.094V29.55z"></path>
+            <path d="M13.5,15.211c0.127,0.046,0.238,0.111,0.335,0.197c0.102,0.095,0.196,0.213,0.278,0.351 c0.095,0.16,0.188,0.345,0.268,0.532l0.62,1.764l-1.68,4.828l-2.107-6.003c-0.135-0.372-0.235-0.679-0.296-0.92 c-0.079-0.3-0.085-0.408-0.085-0.435c0-0.102,0.036-0.178,0.127-0.256c0.096-0.085,0.271-0.129,0.506-0.129h0.59v-1.079H6.701 v1.079h0.37c0.3,0,0.538,0.043,0.688,0.125c0.144,0.079,0.257,0.198,0.346,0.367c0.039,0.072,0.158,0.363,0.502,1.32l3.794,10.6 h0.852l2.564-7.236l2.579,7.236h0.891l3.564-10.303c0.322-0.982,0.479-1.342,0.549-1.469c0.076-0.136,0.155-0.248,0.232-0.336 c0.065-0.074,0.137-0.135,0.209-0.179c0.074-0.044,0.154-0.075,0.244-0.095c0.102-0.021,0.225-0.032,0.361-0.032h0.37v-1.079 h-4.461v1.079h0.368c0.352,0,0.634,0.048,0.84,0.142c0.124,0.058,0.169,0.127,0.169,0.271c0,0.135-0.051,0.503-0.383,1.462 l-2.028,5.868l-2.035-5.779c-0.327-0.913-0.394-1.327-0.394-1.515c0-0.2,0.064-0.284,0.115-0.33 c0.046-0.045,0.174-0.117,0.508-0.117h0.7v-1.079h-5.595v1.079h0.369C13.194,15.142,13.368,15.164,13.5,15.211z"></path>
+        </g>
     </svg>
 );
 
 export const PdfIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M2.25 12.5a.25.25 0 0 0-.25.25v3a.25.25 0 0 0 .25.25h.75a.25.25 0 0 0 .25-.25v-3a.25.25 0 0 0-.25-.25Z"/><path d="M4.25 12.5a.25.25 0 0 0-.25.25v3a.25.25 0 0 0 .25.25h.75a.25.25 0 0 0 .25-.25V14a.25.25 0 0 0-.25-.25Z"/><path d="M2.5 14h.5"/><path d="M6 16.25h.75a.25.25 0 0 0 .25-.25v-3a.25.25 0 0 0-.25-.25H6a.25.25 0 0 0-.25.25v3.5c0 .14.11.25.25.25Z"/><path d="M8.25 12.5a.25.25 0 0 0-.25.25v3.5a.25.25 0 0 0 .25.25h1a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25Z"/>
+    <svg width="16" height="16" fill="currentColor" viewBox="0 0 1920 1920" xmlns="http://www.w3.org/2000/svg">
+        <g fillRule="evenodd">
+            <path d="M1251.654 0c44.499 0 88.207 18.07 119.718 49.581l329.223 329.224c31.963 31.962 49.581 74.54 49.581 119.717V1920H169V0Zm-66.183 112.941H281.94V1807.06h1355.294V564.706H1185.47V112.94Zm112.94 23.379v315.445h315.445L1298.412 136.32Z"></path>
+            <path d="M900.497 677.67c26.767 0 50.372 12.65 67.991 37.835 41.901 59.068 38.965 121.976 23.492 206.682-5.308 29.14.113 58.617 16.263 83.125 22.814 34.786 55.68 82.673 87.981 123.219 23.718 29.93 60.198 45.854 97.13 40.885 23.718-3.276 52.292-5.986 81.656-5.986 131.012 0 121.186 46.757 133.045 89.675 6.55 25.976 3.275 48.678-10.165 65.506-16.715 22.701-51.162 34.447-101.534 34.447-55.793 0-74.202-9.487-122.767-24.96-27.445-8.81-55.906-10.617-83.69-3.275-55.453 14.456-146.936 36.48-223.284 46.983-40.772 5.647-77.816 26.654-102.438 60.875-55.454 76.8-106.842 148.518-188.273 148.518-21.007 0-40.32-7.567-56.244-22.701-23.492-23.492-33.544-49.581-28.574-79.85 13.778-92.95 128.075-144.79 196.066-182.625 16.037-8.923 28.687-22.589 36.592-39.53l107.86-233.223c7.68-16.377 10.051-34.56 7.228-52.518-12.537-79.059-31.06-211.99 18.748-272.075 10.955-13.44 26.09-21.007 42.917-21.007Zm20.556 339.953c-43.257 126.607-119.718 264.282-129.996 280.32 92.273-43.37 275.916-65.28 275.916-65.28-92.386-88.998-145.92-215.04-145.92-215.04Z"></path>
+        </g>
     </svg>
 );
 
@@ -108,7 +123,7 @@ export const ProfessionalIcon: React.FC<{ className?: string }> = ({ className }
 );
 
 export const UndoIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="M3 7v6h6"></path>
         <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
     </svg>
@@ -211,5 +226,76 @@ export const InfoIcon: React.FC<{ className?: string }> = ({ className }) => (
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="16" x2="12" y2="12"></line>
         <line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
+);
+
+export const CombineIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M12 22V12"/>
+        <path d="M5 12H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3"/>
+        <path d="m19 15-7 7-7-7"/>
+    </svg>
+);
+
+// --- Annotation Icons ---
+export const AnnotateIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M12 20h9"></path>
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+    </svg>
+);
+
+export const SelectIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+        <path d="M13 13l6 6" />
+    </svg>
+);
+
+export const RectangleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    </svg>
+);
+
+export const CircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="12" cy="12" r="10"></circle>
+    </svg>
+);
+
+export const ArrowIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+    </svg>
+);
+
+export const TextIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polyline points="4 7 4 4 20 4 20 7"></polyline>
+        <line x1="9" y1="20" x2="15" y2="20"></line>
+        <line x1="12" y1="4" x2="12" y2="20"></line>
+    </svg>
+);
+
+export const PencilIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+    </svg>
+);
+
+export const EraserIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+        <path d="M22 21H7" />
+        <path d="m5 12 5 5" />
+    </svg>
+);
+
+export const RotateIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M23 4v6h-6"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
     </svg>
 );

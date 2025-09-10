@@ -12,6 +12,10 @@ export interface SopOutput {
   steps: InstructionStep[];
 }
 
+export interface IncrementalSopOutput {
+    steps: InstructionStep[];
+}
+
 export type RegenerationMode = 'regenerate' | 'shorter' | 'longer' | 'simpler' | 'professional';
 
 export interface SessionData {
