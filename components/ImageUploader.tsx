@@ -104,7 +104,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={`relative flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-300
-        ${isDragging ? 'border-primary bg-indigo-50' : 'border-slate-300 bg-slate-50 hover:border-primary'}`}
+        ${isDragging ? 'border-primary bg-indigo-50 dark:bg-primary/10' : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:border-primary dark:hover:border-primary'}`}
       >
         <input
           type="file"
@@ -120,24 +120,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
         />
         <div className="flex flex-col items-center justify-center text-center">
             <UploadIcon />
-            <p className="mt-2 text-lg font-semibold text-slate-700">
+            <p className="mt-2 text-lg font-semibold text-slate-700 dark:text-slate-200">
                 Drag & drop, click, or paste (Ctrl+V) screenshots
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
                 Add one or more images to the queue
             </p>
         </div>
       </div>
-      <p className="text-xs text-slate-500 text-center mt-2">
+      <p className="text-xs text-slate-500 dark:text-slate-400 text-center mt-2">
         * Screenshots are automatically sorted by their timestamp.
       </p>
 
       {imagePreviews.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-lg font-semibold text-slate-700 mb-3">Selected Screenshots (Sorted):</h3>
+          <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-3">Selected Screenshots (Sorted):</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {imagePreviews.map((src, index) => (
-              <div key={`${images[index]?.name}-${src}`} className="relative aspect-video rounded-lg overflow-hidden shadow-md border border-slate-200 group">
+              <div key={`${images[index]?.name}-${src}`} className="relative aspect-video rounded-lg overflow-hidden shadow-md border border-slate-200 dark:border-slate-700 group">
                 <img src={src} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
                  <div className="absolute top-1 left-1 bg-primary text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-lg z-10">
                   {index + 1}

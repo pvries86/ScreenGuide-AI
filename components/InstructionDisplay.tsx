@@ -20,19 +20,19 @@ interface InstructionDisplayProps {
 }
 
 const LoadingState: React.FC = () => (
-    <div className="flex flex-col items-center justify-center p-12 border border-slate-200 rounded-lg bg-slate-50">
+    <div className="flex flex-col items-center justify-center p-12 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
         <LoadingIcon />
-        <p className="mt-4 text-lg font-semibold text-slate-600 animate-pulse">
+        <p className="mt-4 text-lg font-semibold text-slate-600 dark:text-slate-300 animate-pulse">
             AI is analyzing your screenshots...
         </p>
-        <p className="text-slate-500">This may take a moment.</p>
+        <p className="text-slate-500 dark:text-slate-400">This may take a moment.</p>
     </div>
 );
 
 const EmptyState: React.FC = () => (
-    <div className="text-center p-12 border border-slate-200 rounded-lg bg-slate-50">
-        <h3 className="text-xl font-semibold text-slate-700">Instructions will appear here</h3>
-        <p className="mt-2 text-slate-500">Upload your screenshots and click "Generate" to start.</p>
+    <div className="text-center p-12 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-200">Instructions will appear here</h3>
+        <p className="mt-2 text-slate-500 dark:text-slate-400">Upload your screenshots and click "Generate" to start.</p>
     </div>
 );
 
@@ -163,9 +163,9 @@ const StepEditor: React.FC<{
     ];
 
     return (
-        <div className="bg-indigo-50 p-4 rounded-lg border border-primary my-2 relative">
+        <div className="bg-indigo-50 dark:bg-primary/10 p-4 rounded-lg border border-primary my-2 relative">
             {isRegenerating && (
-                <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10 rounded-lg backdrop-blur-sm">
+                <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 flex flex-col items-center justify-center z-10 rounded-lg backdrop-blur-sm">
                     <LoadingIcon />
                     <span className="mt-2 text-sm font-semibold text-primary">AI is rewriting...</span>
                 </div>
@@ -174,7 +174,7 @@ const StepEditor: React.FC<{
                 value={editedContent}
                 onChange={(e) => setEditedContent(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full p-2 border border-slate-300 rounded-md text-lg focus:ring-primary focus:border-primary"
+                className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md text-lg focus:ring-primary focus:border-primary bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
                 rows={3}
                 aria-label="Edit instruction text"
                 disabled={isRegenerating}
@@ -187,7 +187,7 @@ const StepEditor: React.FC<{
                             type="button"
                             onClick={() => handleRegenerate(mode as RegenerationMode)}
                             disabled={isRegenerating}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary/50 rounded-full hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-wait"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-white dark:bg-slate-800 border border-primary/50 dark:border-primary/70 rounded-full hover:bg-indigo-50 dark:hover:bg-primary/20 disabled:opacity-50 disabled:cursor-wait"
                             title={`Make text ${label.toLowerCase()}`}
                         >
                             {icon}
@@ -198,7 +198,7 @@ const StepEditor: React.FC<{
                         type="button"
                         onClick={() => handleRegenerate('regenerate')}
                         disabled={isRegenerating}
-                        className="flex items-center justify-center p-2 text-primary bg-white border border-primary/50 rounded-full hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-wait"
+                        className="flex items-center justify-center p-2 text-primary bg-white dark:bg-slate-800 border border-primary/50 dark:border-primary/70 rounded-full hover:bg-indigo-50 dark:hover:bg-primary/20 disabled:opacity-50 disabled:cursor-wait"
                         title="Regenerate"
                     >
                         <RefreshIcon className="w-4 h-4" />
@@ -206,17 +206,17 @@ const StepEditor: React.FC<{
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button type="button" onClick={undo} disabled={!canUndo || isRegenerating} className="p-2 text-slate-600 hover:text-slate-900 rounded-full hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo change" title="Undo (Ctrl+Z)">
+                    <button type="button" onClick={undo} disabled={!canUndo || isRegenerating} className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo change" title="Undo (Ctrl+Z)">
                         <UndoIcon className="w-5 h-5" />
                     </button>
-                    <button type="button" onClick={redo} disabled={!canRedo || isRegenerating} className="p-2 text-slate-600 hover:text-slate-900 rounded-full hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo change" title="Redo (Ctrl+Y)">
+                    <button type="button" onClick={redo} disabled={!canRedo || isRegenerating} className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo change" title="Redo (Ctrl+Y)">
                         <RedoIcon className="w-5 h-5" />
                     </button>
-                    <div className="h-5 w-px bg-slate-300 mx-1"></div>
-                    <button type="button" onClick={onCancel} disabled={isRegenerating} className="p-2 text-slate-600 hover:text-slate-900 rounded-full hover:bg-slate-200 disabled:opacity-50" aria-label="Cancel edit">
+                    <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                    <button type="button" onClick={onCancel} disabled={isRegenerating} className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" aria-label="Cancel edit">
                         <CloseIcon className="w-5 h-5" />
                     </button>
-                    <button type="button" onClick={handleSave} disabled={isRegenerating} className="p-2 text-green-600 hover:text-green-800 rounded-full hover:bg-green-100 disabled:opacity-50" aria-label="Save changes">
+                    <button type="button" onClick={handleSave} disabled={isRegenerating} className="p-2 text-green-600 hover:text-green-800 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20 disabled:opacity-50" aria-label="Save changes">
                         <CheckIcon className="w-5 h-5" />
                     </button>
                 </div>
@@ -350,23 +350,23 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                     value={title}
                     onChange={(e) => onTitleChange(e.target.value)}
                     placeholder="Procedure Title"
-                    className="text-2xl font-bold text-slate-800 bg-transparent focus:outline-none focus:bg-slate-100 rounded-md -ml-2 p-2 w-full"
+                    className="text-2xl font-bold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-700 rounded-md -ml-2 p-2 w-full"
                     aria-label="Procedure Title"
                 />
                 <div className="flex items-center space-x-2 flex-shrink-0">
-                    <button onClick={handleExportDocx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 transition-colors">
+                    <button onClick={handleExportDocx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                         <DocxIcon />
                         DOCX
                     </button>
-                    <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 transition-colors">
+                    <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                         <PdfIcon />
                         PDF
                     </button>
                 </div>
             </div>
 
-            <div ref={displayRef} className="p-8 border border-slate-200 rounded-lg bg-white prose max-w-none">
-                <h1 className="text-3xl font-bold !text-center !mb-8">{title}</h1>
+            <div ref={displayRef} className="p-8 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/50 prose dark:prose-invert max-w-none">
+                <h1 className="text-3xl font-bold !text-center !mb-8 !text-slate-900 dark:!text-slate-100">{title}</h1>
                 <div className="space-y-6">
                     {instructionBlocks.map((block, blockIndex) => {
                         textStepCounter++;
@@ -401,20 +401,20 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                                     className={`group relative rounded-lg transition-all duration-200 ${isBeingDragged ? 'opacity-40 shadow-2xl' : ''}`}
                                 >
                                     <div className="flex gap-2">
-                                        <div className="text-slate-400 pt-2 cursor-grab" title="Drag to reorder">
+                                        <div className="text-slate-400 dark:text-slate-500 pt-2 cursor-grab" title="Drag to reorder">
                                           <DragHandleIcon />
                                         </div>
                                         <div className="flex-1">
-                                            <div className="p-2 -m-2 rounded-lg hover:bg-slate-100 cursor-pointer" onClick={() => handleStartEditing(block.textStepIndex)}>
+                                            <div className="p-2 -m-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer" onClick={() => handleStartEditing(block.textStepIndex)}>
                                                 <p className="text-lg leading-relaxed flex">
                                                     <span className="font-bold w-8 flex-shrink-0">{textStepCounter}.</span>
                                                     <span>{block.textStep.content}</span>
                                                 </p>
                                                 <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(block.textStepIndex); }} className="p-1.5 bg-white text-slate-500 hover:bg-red-100 hover:text-red-600 rounded-full shadow border border-slate-200" aria-label="Delete step">
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Delete step">
                                                         <TrashIcon className="w-4 h-4" />
                                                     </button>
-                                                    <button className="p-1.5 bg-white text-slate-500 hover:bg-indigo-100 hover:text-primary rounded-full shadow border border-slate-200" aria-label="Edit step">
+                                                    <button className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:text-primary dark:hover:text-indigo-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Edit step">
                                                         <EditIcon className="w-4 h-4" />
                                                     </button>
                                                 </div>
@@ -428,7 +428,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                                                             <img
                                                                 src={imageUrls[imageIndex]}
                                                                 alt={`Screenshot for step ${textStepCounter}`}
-                                                                className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200"
+                                                                className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200 dark:border-slate-700"
                                                             />
                                                         </div>
                                                     );

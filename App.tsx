@@ -3,9 +3,10 @@ import { SessionManager } from './components/SessionManager';
 import { ImageUploader } from './components/ImageUploader';
 import { InstructionDisplay } from './components/InstructionDisplay';
 import { LanguageToggle } from './components/LanguageToggle';
+import { SettingsModal } from './components/SettingsModal';
 import { generateInstructions, regenerateInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme } from './types';
 import { GenerateIcon, SaveIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 
@@ -26,6 +27,43 @@ const App: React.FC = () => {
   const [isModified, setIsModified] = useState<boolean>(false);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Settings State
+  const [apiKey, setApiKey] = useState<string>('');
+  const [theme, setTheme] = useState<Theme>('light');
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+
+  // --- Theme & API Key Management ---
+  useEffect(() => {
+    // Load theme
+    const savedTheme = localStorage.getItem('theme') as Theme | null;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (savedTheme) {
+        setTheme(savedTheme);
+    } else if (prefersDark) {
+        setTheme('dark');
+    }
+
+    // Load API Key
+    const savedApiKey = localStorage.getItem('gemini-api-key');
+    if (savedApiKey) {
+        setApiKey(savedApiKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  
+  const handleApiKeySave = (newKey: string) => {
+    setApiKey(newKey);
+    localStorage.setItem('gemini-api-key', newKey);
+  };
 
   // --- Session Management Callbacks ---
 
@@ -270,7 +308,7 @@ const App: React.FC = () => {
         previousStep,
         currentStep: currentStep.content,
         nextStep,
-      }, mode);
+      }, mode, apiKey);
 
       // Instead of updating state here, we return the content to the editor.
       return newContent;
@@ -299,19 +337,20 @@ const App: React.FC = () => {
     setIsModified(false); // New generation is not a modification of a saved state
 
     try {
-      const { title: newTitle, steps } = await generateInstructions(images, language);
+      const { title: newTitle, steps } = await generateInstructions(images, language, apiKey);
       setTitle(newTitle);
       setInstructionSteps(steps);
     } catch (e) {
       console.error(e);
-      setError('Failed to generate instructions. Please check the console for details.');
+      const errorMessage = e instanceof Error ? e.message : 'Failed to generate instructions. Please check your API key and try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, [images, language]);
+  }, [images, language, apiKey]);
 
   return (
-    <div className="flex w-full min-h-screen bg-slate-100 text-slate-900">
+    <div className="flex w-full min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200">
       <SessionManager 
         sessions={sessions}
         currentSessionId={currentSessionId}
@@ -321,15 +360,16 @@ const App: React.FC = () => {
         onImport={handleImportSession}
         onExport={handleExportSession}
         isExportDisabled={!currentSessionId}
+        onSettingsClick={() => setIsSettingsOpen(true)}
       />
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto p-4 md:p-8">
-            <div className="max-w-4xl mx-auto bg-white p-6 md:p-8 rounded-2xl shadow-lg border border-slate-200">
+            <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2">
+                    <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">
                       ScreenGuide AI
                     </h1>
-                    <p className="text-slate-500 max-w-2xl mx-auto">
+                    <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
                       Turn screenshots into step-by-step guides instantly. Upload, generate, and export.
                     </p>
                 </div>
@@ -337,13 +377,13 @@ const App: React.FC = () => {
                 <div className="space-y-6">
                     <ImageUploader onImagesChange={handleImagesChange} images={images} />
                     
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
                         <LanguageToggle language={language} onLanguageChange={setLanguage} />
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                             <button
                                 onClick={handleSaveSession}
                                 disabled={isSaving || (instructionSteps.length === 0 && !title)}
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-white text-primary border border-primary font-semibold rounded-lg shadow-sm hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-200 disabled:text-slate-500 disabled:border-slate-300 disabled:cursor-not-allowed transition-all duration-300"
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-slate-700 text-primary dark:text-indigo-400 border border-primary dark:border-indigo-400 font-semibold rounded-lg shadow-sm hover:bg-indigo-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-200 dark:disabled:bg-slate-600 disabled:text-slate-500 disabled:border-slate-300 dark:disabled:border-slate-500 disabled:cursor-not-allowed transition-all duration-300"
                             >
                                 <SaveIcon className="w-5 h-5" />
                                 {isSaving ? 'Saving...' : 'Save'}
@@ -351,7 +391,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={handleGenerate}
                                 disabled={isLoading || images.length === 0}
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-300"
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300"
                             >
                                 <GenerateIcon />
                                 {isLoading ? 'Generating...' : 'Generate'}
@@ -360,14 +400,14 @@ const App: React.FC = () => {
                     </div>
 
                     {error && (
-                      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
+                      <div className="bg-red-100 dark:bg-red-900/30 border-l-4 border-red-500 text-red-700 dark:text-red-300 p-4 rounded-md" role="alert">
                         <p className="font-bold">Error</p>
                         <p>{error}</p>
                       </div>
                     )}
 
                     {isModified && (
-                      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-md" role="alert">
+                      <div className="bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-800 dark:text-yellow-300 p-4 rounded-md" role="alert">
                         <p className="font-bold">Unsaved Changes</p>
                         <p>You have unsaved changes. Click 'Save' to keep them.</p>
                       </div>
@@ -388,6 +428,14 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        theme={theme}
+        onThemeChange={setTheme}
+        apiKey={apiKey}
+        onApiKeySave={handleApiKeySave}
+      />
     </div>
   );
 };

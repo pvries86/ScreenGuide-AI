@@ -2,13 +2,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { fileToBase64 } from '../utils/fileUtils';
 import { Language, SopOutput, RegenerationMode } from '../types';
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const getAiClient = (apiKey: string): GoogleGenAI => {
+    if (!apiKey) {
+      throw new Error("API key is not configured. Please set it in the settings menu.");
+    }
+    return new GoogleGenAI({ apiKey });
+};
 
 const responseSchema = {
   type: Type.OBJECT,
@@ -39,13 +38,14 @@ const responseSchema = {
   required: ['title', 'steps']
 };
 
-export const generateInstructions = async (images: File[], language: Language): Promise<SopOutput> => {
+export const generateInstructions = async (images: File[], language: Language, apiKey: string): Promise<SopOutput> => {
+  const ai = getAiClient(apiKey);
   const languageName = language === 'en' ? 'English' : 'Dutch';
 
   const prompt = `You are an expert technical writer specializing in creating clear, concise Standard Operating Procedures (SOPs). Your task is to analyze the following sequence of screenshots and generate a step-by-step guide.
 First, create a short, descriptive title for the overall process shown in the screenshots.
 Then, generate the steps. The instructions must be derived solely from the visual information in the images. The output language must be ${languageName}.
-You must return the output as a single JSON object that strictly adheres to the provided schema, containing both the title and the array of steps. Each step can be either a text instruction or a reference to an image. For text, use the type 'text' and provide the instruction in the 'content' field. To include an image, use the type 'image' and set the 'content' to the 1-based index of the corresponding screenshot in the sequence. Ensure the image references are placed logically after the text step they illustrate.`;
+You must return the a single JSON object that strictly adheres to the provided schema, containing both the title and the array of steps. Each step can be either a text instruction or a reference to an image. For text, use the type 'text' and provide the instruction in the 'content' field. To include an image, use the type 'image' and set the 'content' to the 1-based index of the corresponding screenshot in the sequence. Ensure the image references are placed logically after the text step they illustrate.`;
 
   const imageParts = await Promise.all(
     images.map(async (file) => {
@@ -91,8 +91,10 @@ export const regenerateInstruction = async (
     currentStep: string;
     nextStep: string | null;
   },
-  mode: RegenerationMode = 'regenerate'
+  mode: RegenerationMode = 'regenerate',
+  apiKey: string
 ): Promise<string> => {
+  const ai = getAiClient(apiKey);
   const languageName = language === 'en' ? 'English' : 'Dutch';
   const { previousStep, currentStep, nextStep } = context;
 

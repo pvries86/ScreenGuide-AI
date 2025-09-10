@@ -1,5 +1,7 @@
 export type Language = 'en' | 'nl';
 
+export type Theme = 'light' | 'dark';
+
 export interface InstructionStep {
   type: 'text' | 'image';
   content: string;
