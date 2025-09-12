@@ -1,18 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { base64ToFile } from '../utils/fileUtils';
-import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon } from './icons';
+import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon, CropIcon } from './icons';
 
 // --- Types ---
-type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser';
+type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop';
 type LineWidth = 2 | 4 | 8;
-type Action = 'none' | 'drawing' | 'moving' | 'resizing' | 'rotating';
+type Action = 'none' | 'drawing' | 'moving' | 'resizing' | 'rotating' | 'cropping';
 type HandleKey = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'rotate';
 
 interface Point { x: number; y: number; }
 
 interface Annotation {
   id: number;
-  type: Exclude<AnnotationTool, 'eraser' | 'select'>;
+  type: Exclude<AnnotationTool, 'eraser' | 'select' | 'crop'>;
   color: string;
   lineWidth: LineWidth;
   start: Point;
@@ -165,7 +165,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   
   const [textEditing, setTextEditing] = useState<TextEditingState | null>(null);
 
-  const initialState = useRef<{ annotation: Annotation | null, mousePos: Point }>({ annotation: null, mousePos: { x: 0, y: 0 } });
+  const [cropRect, setCropRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+  const initialState = useRef<{ annotation: Annotation | null, mousePos: Point, cropRect: typeof cropRect }>({ annotation: null, mousePos: { x: 0, y: 0 }, cropRect: null });
   
   const [canvasCursor, setCanvasCursor] = useState('default');
 
@@ -185,6 +186,15 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     return () => window.removeEventListener('resize', update);
   }, [textEditing]);
 
+  const getCropHandles = (rect: { x: number, y: number, width: number, height: number }): Omit<Handle, 'cursor'>[] => {
+    const { x, y, width, height } = rect;
+    return [
+      { key: 'nw', position: { x, y } }, { key: 'n', position: { x: x + width / 2, y } }, { key: 'ne', position: { x: x + width, y } },
+      { key: 'w', position: { x, y: y + height / 2 } }, { key: 'e', position: { x: x + width, y: y + height / 2 } },
+      { key: 'sw', position: { x, y: y + height } }, { key: 's', position: { x: x + width / 2, y: y + height } }, { key: 'se', position: { x: x + width, y: y + height } },
+    ] as Omit<Handle, 'cursor'>[];
+  };
+
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const image = imageRef.current;
@@ -194,6 +204,34 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    
+    if (tool === 'crop' && cropRect) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        const { x, y, width, height } = cropRect;
+        // Use path winding rule to fill the area *outside* the crop rectangle
+        ctx.beginPath();
+        // Outer rectangle (the entire canvas)
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        // Inner rectangle (the crop area)
+        ctx.rect(x, y, width, height);
+        // Fill using the 'evenodd' rule, which creates a hole where the inner rectangle is.
+        ctx.fill('evenodd');
+        ctx.restore();
+
+        // Draw border and handles for the crop area itself
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 3]);
+        ctx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'white';
+        getCropHandles(cropRect).forEach(handle => {
+             ctx.fillRect(handle.position.x - HANDLE_SIZE / 2, handle.position.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+        });
+    }
+
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -269,10 +307,10 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
         }
         ctx.restore();
     });
-  }, [history, selectedAnnotationId]);
+  }, [history, selectedAnnotationId, tool, cropRect]);
 
     useEffect(() => {
-        if (!isOpen || !imageFile) { setHistory([]); setSelectedAnnotationId(null); return; }
+        if (!isOpen || !imageFile) { setHistory([]); setSelectedAnnotationId(null); setCropRect(null); return; }
         const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return;
         const img = new Image();
         img.onload = () => {
@@ -362,20 +400,37 @@ const canvasToMain = (p: Point): Point => {
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (textEditing) {
-        // Commit when clicking outside the textarea (canvas click)
         commitText(textEditing.value, { x: textEditing.x, y: textEditing.y });
         return;
     }
-
     const mousePos = getCanvasPoint(e);
 
-    if (tool === 'text') {
-    const base = { x: mousePos.x + 5, y: mousePos.y + 5 };
-    const screen = canvasToMain(base);
-    setTimeout(() => setTextEditing({ x: base.x, y: base.y, sx: screen.x, sy: screen.y, value: '' }), 0);
-    return;
+    if (tool === 'crop') {
+        let clickedOnHandle: Omit<Handle,'cursor'> | null = null;
+        if(cropRect) {
+            clickedOnHandle = getCropHandles(cropRect).find(h => Math.hypot(h.position.x - mousePos.x, h.position.y - mousePos.y) < HANDLE_SIZE / 2 + 2) || null;
+        }
+
+        if(clickedOnHandle) {
+            setActiveHandleKey(clickedOnHandle.key);
+            setCurrentAction('resizing');
+        } else if (cropRect && mousePos.x > cropRect.x && mousePos.x < cropRect.x + cropRect.width && mousePos.y > cropRect.y && mousePos.y < cropRect.y + cropRect.height) {
+            setCurrentAction('moving');
+        } else {
+            setCurrentAction('cropping');
+            setStartPoint(mousePos);
+            setCropRect({ x: mousePos.x, y: mousePos.y, width: 0, height: 0 });
+        }
+        initialState.current = { annotation: null, mousePos, cropRect };
+        return;
     }
 
+    if (tool === 'text') {
+        const base = { x: mousePos.x + 5, y: mousePos.y + 5 };
+        const screen = canvasToMain(base);
+        setTimeout(() => setTextEditing({ x: base.x, y: base.y, sx: screen.x, sy: screen.y, value: '' }), 0);
+        return;
+    }
 
     let clickedOnHandle: Handle | null = null;
     let clickedAnnotation: Annotation | null = null;
@@ -384,16 +439,13 @@ const canvasToMain = (p: Point): Point => {
         const selectedAnn = history.find(a => a.id === selectedAnnotationId);
         if (selectedAnn) {
             const handles = getAnnotationHandles(selectedAnn);
-            clickedOnHandle = handles.find(h => {
-                const dist = Math.hypot(h.position.x - mousePos.x, h.position.y - mousePos.y);
-                return dist < HANDLE_SIZE / 2 + 2;
-            }) || null;
+            clickedOnHandle = handles.find(h => Math.hypot(h.position.x - mousePos.x, h.position.y - mousePos.y) < HANDLE_SIZE / 2 + 2) || null;
         }
     }
 
     if (clickedOnHandle) {
         const annotation = history.find(a => a.id === selectedAnnotationId)!;
-        initialState.current = { annotation, mousePos };
+        initialState.current = { annotation, mousePos, cropRect: null };
         setActiveHandleKey(clickedOnHandle.key);
         if (clickedOnHandle.key === 'rotate') setCurrentAction('rotating');
         else setCurrentAction('resizing');
@@ -408,7 +460,7 @@ const canvasToMain = (p: Point): Point => {
         if (clickedAnnotation && tool === 'select') {
             setSelectedAnnotationId(clickedAnnotation.id);
             setCurrentAction('moving');
-            initialState.current = { annotation: clickedAnnotation, mousePos };
+            initialState.current = { annotation: clickedAnnotation, mousePos, cropRect: null };
         } else if (tool !== 'select' && tool !== 'eraser') {
             setSelectedAnnotationId(null);
             setCurrentAction('drawing');
@@ -425,6 +477,42 @@ const canvasToMain = (p: Point): Point => {
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const mousePos = getCanvasPoint(e);
+
+    if (tool === 'crop') {
+        if (currentAction === 'cropping' && startPoint) {
+            const x = Math.min(startPoint.x, mousePos.x);
+            const y = Math.min(startPoint.y, mousePos.y);
+            const width = Math.abs(startPoint.x - mousePos.x);
+            const height = Math.abs(startPoint.y - mousePos.y);
+            setCropRect({ x, y, width, height });
+        } else if (currentAction === 'moving' && initialState.current.cropRect) {
+            const dx = mousePos.x - initialState.current.mousePos.x;
+            const dy = mousePos.y - initialState.current.mousePos.y;
+            setCropRect({ ...initialState.current.cropRect, x: initialState.current.cropRect.x + dx, y: initialState.current.cropRect.y + dy });
+        } else if (currentAction === 'resizing' && initialState.current.cropRect && activeHandleKey) {
+             const { x, y, width, height } = initialState.current.cropRect;
+             let newX = x, newY = y, newW = width, newH = height;
+             const dx = mousePos.x - initialState.current.mousePos.x;
+             const dy = mousePos.y - initialState.current.mousePos.y;
+             if (activeHandleKey.includes('e')) newW += dx;
+             if (activeHandleKey.includes('w')) { newW -= dx; newX += dx; }
+             if (activeHandleKey.includes('s')) newH += dy;
+             if (activeHandleKey.includes('n')) { newH -= dy; newY += dy; }
+             setCropRect({ x: newX, y: newY, width: newW, height: newH });
+        } else {
+            // Set cursor for crop tool
+            let newCursor = 'crosshair';
+            if (cropRect) {
+                const handle = getCropHandles(cropRect).find(h => Math.hypot(h.position.x - mousePos.x, h.position.y - mousePos.y) < HANDLE_SIZE / 2 + 2);
+                const cursors: Record<HandleKey, string> = { nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize', w: 'ew-resize', e: 'ew-resize', sw: 'nesw-resize', s: 'ns-resize', se: 'nwse-resize', rotate: '' };
+                if (handle) newCursor = cursors[handle.key as HandleKey];
+                else if (mousePos.x > cropRect.x && mousePos.x < cropRect.x + cropRect.width && mousePos.y > cropRect.y && mousePos.y < cropRect.y + cropRect.height) newCursor = 'move';
+            }
+            setCanvasCursor(newCursor);
+        }
+        return;
+    }
+    
     if (currentAction === 'none') {
         let newCursor = 'default';
         if (tool === 'select') newCursor = 'grab';
@@ -553,6 +641,24 @@ const canvasToMain = (p: Point): Point => {
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (tool === 'crop' && currentAction === 'resizing' && initialState.current.cropRect) {
+        const mousePos = getCanvasPoint(e);
+        const { x, y, width, height } = initialState.current.cropRect;
+        let newX = x, newY = y, newW = width, newH = height;
+        const dx = mousePos.x - initialState.current.mousePos.x;
+        const dy = mousePos.y - initialState.current.mousePos.y;
+        if (activeHandleKey.includes('e')) newW += dx;
+        if (activeHandleKey.includes('w')) { newW -= dx; newX += dx; }
+        if (activeHandleKey.includes('s')) newH += dy;
+        if (activeHandleKey.includes('n')) { newH -= dy; newY += dy; }
+        setCropRect({ x: newW > 0 ? newX : newX + newW, y: newH > 0 ? newY : newY + newH, width: Math.abs(newW), height: Math.abs(newH) });
+    } else if (tool === 'crop' && currentAction === 'cropping' && startPoint) {
+         const mousePos = getCanvasPoint(e);
+         if (Math.abs(startPoint.x - mousePos.x) < 5 || Math.abs(startPoint.y - mousePos.y) < 5) {
+            setCropRect(null); // too small, cancel
+        }
+    }
+
     if (currentAction === 'drawing' && startPoint) {
         const endPoint = getCanvasPoint(e);
         let newAnnotation: Annotation | null = null;
@@ -560,7 +666,7 @@ const canvasToMain = (p: Point): Point => {
             newAnnotation = { id: Date.now(), type: 'pencil', color, lineWidth, rotation: 0, start: startPoint, end: endPoint, points: currentPoints };
         } else if (tool === 'arrow') {
             newAnnotation = { id: Date.now(), type: 'arrow', color, lineWidth, rotation: 0, start: startPoint, end: endPoint };
-        } else if (tool !== 'eraser' && tool !== 'text' && tool !== 'select') {
+        } else if (tool !== 'eraser' && tool !== 'text' && tool !== 'select' && tool !== 'crop') {
             newAnnotation = { id: Date.now(), type: tool, color, lineWidth, rotation: 0, 
                 start: startPoint, 
                 end: endPoint,
@@ -575,16 +681,16 @@ const canvasToMain = (p: Point): Point => {
 
   const handleUndo = () => { setHistory(history.slice(0, -1)); };
   
-  const handleSave = () => {
+  const handleSaveAnnotations = () => {
     const canvas = canvasRef.current; if (!canvas || !imageFile || !imageRef.current) return;
     const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const originalImage = imageRef.current;
     if (!tempCtx) return;
     setSelectedAnnotationId(null);
     
     setTimeout(() => {
-        tempCanvas.width = originalImage.width; tempCanvas.height = originalImage.height;
-        const scaleX = originalImage.width / canvas.width;
-        const scaleY = originalImage.height / canvas.height;
+        tempCanvas.width = originalImage.naturalWidth; tempCanvas.height = originalImage.naturalHeight;
+        const scaleX = originalImage.naturalWidth / canvas.width;
+        const scaleY = originalImage.naturalHeight / canvas.height;
         
         tempCtx.drawImage(originalImage, 0, 0);
         tempCtx.lineCap = "round"; tempCtx.lineJoin = "round";
@@ -644,10 +750,50 @@ const canvasToMain = (p: Point): Point => {
     }, 50);
   };
   
+  const handleApplyCrop = useCallback(() => {
+    const canvas = canvasRef.current; const image = imageRef.current;
+    if (!cropRect || !canvas || !image || !imageFile) return;
+    
+    const scaleX = image.naturalWidth / canvas.width;
+    const scaleY = image.naturalHeight / canvas.height;
+
+    const sourceX = cropRect.x * scaleX;
+    const sourceY = cropRect.y * scaleY;
+    const sourceWidth = cropRect.width * scaleX;
+    const sourceHeight = cropRect.height * scaleY;
+
+    if (sourceWidth < 1 || sourceHeight < 1) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = sourceWidth;
+    tempCanvas.height = sourceHeight;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight);
+    
+    const dataUrl = tempCanvas.toDataURL(imageFile.type);
+    const newFile = base64ToFile(dataUrl, `cropped_${imageFile.name}`, imageFile.type, Date.now());
+    
+    // Reset state and save the new file. The parent component will pass the new file back as a prop,
+    // which will trigger the useEffect to reload the canvas.
+    setHistory([]);
+    setSelectedAnnotationId(null);
+    setCropRect(null);
+    setTool('select');
+    onSave(newFile);
+
+  }, [cropRect, imageFile, onSave]);
+
+  const handleCancelCrop = () => {
+    setCropRect(null);
+    setTool('select');
+  };
+
   if (!isOpen) return null;
 
   const tools: { name: AnnotationTool; icon: JSX.Element }[] = [
-    { name: 'select', icon: <SelectIcon /> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
+    { name: 'select', icon: <SelectIcon /> }, { name: 'crop', icon: <CropIcon/> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
     { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
   ];
   const lineSizes: { value: LineWidth, label: string }[] = [{ value: 2, label: 'S' }, { value: 4, label: 'M' }, { value: 8, label: 'L' }];
@@ -673,11 +819,11 @@ const canvasToMain = (p: Point): Point => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={handleUndo} disabled={history.length === 0} className="p-2 rounded-md hover:bg-slate-700 disabled:opacity-50" title="Undo"><UndoIcon /></button>
+                    <button onClick={handleUndo} disabled={history.length === 0 || tool === 'crop'} className="p-2 rounded-md hover:bg-slate-700 disabled:opacity-50" title="Undo"><UndoIcon /></button>
                     <button onClick={handleDeleteSelected} disabled={selectedAnnotationId === null} className="p-2 rounded-md hover:bg-slate-700 disabled:opacity-50 text-red-400 hover:text-red-500" title="Delete Selected"><TrashIcon /></button>
                     <div className="h-6 w-px bg-slate-700 mx-2"></div>
                     <button onClick={onClose} className="px-4 py-2 text-sm font-semibold rounded-md hover:bg-slate-700">Cancel</button>
-                    <button onClick={handleSave} className="px-4 py-2 text-sm font-semibold rounded-md bg-primary hover:bg-secondary">Save Changes</button>
+                    <button onClick={handleSaveAnnotations} className="px-4 py-2 text-sm font-semibold rounded-md bg-primary hover:bg-secondary">Save Changes</button>
                 </div>
             </header>
             <main ref={mainRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
@@ -726,6 +872,12 @@ const canvasToMain = (p: Point): Point => {
                             zIndex: 100,
                         }}
                     />
+                )}
+                {tool === 'crop' && cropRect && (
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-slate-800 p-2 rounded-lg shadow-lg flex items-center gap-2">
+                        <button onClick={handleCancelCrop} className="px-4 py-2 text-sm font-semibold text-white rounded-md hover:bg-slate-700">Cancel</button>
+                        <button onClick={handleApplyCrop} className="px-4 py-2 text-sm font-semibold text-white rounded-md bg-primary hover:bg-secondary">Apply Crop</button>
+                    </div>
                 )}
             </main>
         </div>
