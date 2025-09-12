@@ -4,7 +4,7 @@ import { exportToDocx, exportToPdf } from '../utils/exportUtils';
 import { 
     DocxIcon, PdfIcon, LoadingIcon, EditIcon, RefreshIcon, 
     CheckIcon, CloseIcon, ShorterIcon, LongerIcon, SimplerIcon, ProfessionalIcon,
-    TrashIcon, DragHandleIcon, AnnotateIcon, CombineIcon
+    TrashIcon, DragHandleIcon, AnnotateIcon, CombineIcon, PlusIcon
 } from './icons';
 
 interface InstructionDisplayProps {
@@ -136,6 +136,25 @@ const StepEditor: React.FC<{
     );
 }
 
+const Inserter: React.FC<{ onClick: () => void; onHover: () => void; onLeave: () => void; isVisible: boolean; }> = ({ onClick, onHover, onLeave, isVisible }) => (
+    <div className="relative h-8 -my-4 group/inserter" onMouseEnter={onHover} onMouseLeave={onLeave}>
+        <div 
+            className={`absolute inset-x-0 top-1/2 h-px bg-primary transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`} 
+            aria-hidden="true"
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+            <button
+                onClick={onClick}
+                className={`flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-primary bg-white dark:bg-slate-800 border border-primary/50 dark:border-primary/70 rounded-full shadow-lg transform transition-all duration-200 z-10 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'}`}
+                aria-label="Insert new step"
+            >
+                <PlusIcon className="w-4 h-4" />
+                Add step
+            </button>
+        </div>
+    </div>
+);
+
 export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({ 
     title, onTitleChange, steps, images, isLoading, onStepsChange, onDeleteStep, onRegenerateStep, regeneratingIndex, onAnnotateImage
 }) => {
@@ -146,6 +165,8 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
     const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+    const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null);
 
     useEffect(() => {
         imageUrls.forEach(URL.revokeObjectURL);
@@ -244,6 +265,25 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
         setDragOverIndex(null);
     };
 
+    const handleInsertStep = (afterBlockIndex: number) => {
+        const newSteps = [...steps];
+        const newTextStep: InstructionStep = { type: 'text', content: '' };
+
+        let insertAtIndex;
+        if (afterBlockIndex === -1) { // Insert at the very beginning
+            insertAtIndex = 0;
+        } else {
+            const previousBlock = instructionBlocks[afterBlockIndex];
+            // Find the index of the last step in the block (could be an image)
+            const lastStepOfBlockIndex = previousBlock.textStepIndex + previousBlock.imageSteps.length;
+            insertAtIndex = lastStepOfBlockIndex + 1;
+        }
+
+        newSteps.splice(insertAtIndex, 0, newTextStep);
+        onStepsChange(newSteps);
+        setEditingIndex(insertAtIndex); // Immediately edit the new step
+    };
+
     if (isLoading) return <LoadingState />;
     if (steps.length === 0) return <EmptyState />;
 
@@ -267,54 +307,68 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                     </div>
                 )}
                 <div className="space-y-6">
+                    <Inserter 
+                        isVisible={hoveredInsertIndex === -1}
+                        onHover={() => setHoveredInsertIndex(-1)}
+                        onLeave={() => setHoveredInsertIndex(null)}
+                        onClick={() => handleInsertStep(-1)}
+                    />
                     {instructionBlocks.map((block, blockIndex) => {
                         textStepCounter++;
                         const isEditing = editingIndex === block.textStepIndex;
                         const isBeingDragged = draggedIndex === blockIndex;
                         const isSelected = selectedIndices.includes(block.textStepIndex);
-                        if (isEditing) {
-                            return (
-                                <StepEditor key={block.textStepIndex} step={block.textStep} index={block.textStepIndex} steps={steps} onStepsChange={onStepsChange} onRegenerateStep={onRegenerateStep} regeneratingIndex={regeneratingIndex} onCancel={handleCancelEditing} />
-                            );
-                        }
+                        
                         return (
-                            <div key={block.textStepIndex} className="relative group/block">
-                                {dragOverIndex === blockIndex && <div className="absolute -top-3 left-0 w-full h-1 bg-primary rounded-full"></div>}
-                                <div draggable={!isEditing} onDragStart={(e) => handleDragStart(e, blockIndex)} onDragEnter={(e) => handleDragEnter(e, blockIndex)} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd} className={`relative rounded-lg transition-all duration-200 ${isBeingDragged ? 'opacity-40 shadow-2xl' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-primary/10 ring-2 ring-primary' : ''}`}>
-                                    <div className="flex gap-4 items-start">
-                                        <div className="flex-shrink-0 flex items-center gap-2 pt-2">
-                                             <input type="checkbox" checked={isSelected} onChange={() => handleToggleSelection(block.textStepIndex)} className="h-5 w-5 rounded border-slate-400 dark:border-slate-500 text-primary focus:ring-primary bg-transparent dark:bg-slate-800 focus:ring-offset-0 opacity-0 group-hover/block:opacity-100 checked:opacity-100 transition-opacity" aria-label={`Select step ${textStepCounter}`} />
-                                            <div className="text-slate-400 dark:text-slate-500 cursor-grab" title="Drag to reorder"><DragHandleIcon /></div>
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="p-2 -m-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer group/step" onClick={() => handleStartEditing(block.textStepIndex)}>
-                                                <p className="text-lg leading-relaxed flex">
-                                                    <span className="font-bold w-8 flex-shrink-0">{textStepCounter}.</span>
-                                                    <span>{block.textStep.content}</span>
-                                                </p>
-                                                <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1 opacity-0 group-hover/step:opacity-100 focus-within:opacity-100 transition-opacity">
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Delete step"><TrashIcon className="w-4 h-4" /></button>
-                                                    <button className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:text-primary dark:hover:text-indigo-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Edit step"><EditIcon className="w-4 h-4" /></button>
+                           <React.Fragment key={block.textStepIndex}>
+                                {isEditing ? (
+                                    <StepEditor step={block.textStep} index={block.textStepIndex} steps={steps} onStepsChange={onStepsChange} onRegenerateStep={onRegenerateStep} regeneratingIndex={regeneratingIndex} onCancel={handleCancelEditing} />
+                                ) : (
+                                    <div className="relative group/block">
+                                        {dragOverIndex === blockIndex && <div className="absolute -top-3 left-0 w-full h-1 bg-primary rounded-full"></div>}
+                                        <div draggable={!isEditing} onDragStart={(e) => handleDragStart(e, blockIndex)} onDragEnter={(e) => handleDragEnter(e, blockIndex)} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd} className={`relative rounded-lg transition-all duration-200 ${isBeingDragged ? 'opacity-40 shadow-2xl' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-primary/10 ring-2 ring-primary' : ''}`}>
+                                            <div className="flex gap-4 items-start">
+                                                <div className="flex-shrink-0 flex items-center gap-2 pt-2">
+                                                    <input type="checkbox" checked={isSelected} onChange={() => handleToggleSelection(block.textStepIndex)} className="h-5 w-5 rounded border-slate-400 dark:border-slate-500 text-primary focus:ring-primary bg-transparent dark:bg-slate-800 focus:ring-offset-0 opacity-0 group-hover/block:opacity-100 checked:opacity-100 transition-opacity" aria-label={`Select step ${textStepCounter}`} />
+                                                    <div className="text-slate-400 dark:text-slate-500 cursor-grab" title="Drag to reorder"><DragHandleIcon /></div>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="p-2 -m-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer group/step" onClick={() => handleStartEditing(block.textStepIndex)}>
+                                                        <p className="text-lg leading-relaxed flex">
+                                                            <span className="font-bold w-8 flex-shrink-0">{textStepCounter}.</span>
+                                                            <span>{block.textStep.content}</span>
+                                                        </p>
+                                                        <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1 opacity-0 group-hover/step:opacity-100 focus-within:opacity-100 transition-opacity">
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Delete step"><TrashIcon className="w-4 h-4" /></button>
+                                                            <button className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:text-primary dark:hover:text-indigo-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Edit step"><EditIcon className="w-4 h-4" /></button>
+                                                        </div>
+                                                    </div>
+                                                    {block.imageSteps.map((imageStep, imgIdx) => {
+                                                        const imageIndex = parseInt(imageStep.content, 10) - 1;
+                                                        if (imageIndex >= 0 && imageIndex < imageUrls.length) {
+                                                            return (
+                                                                <div key={`${block.textStepIndex}-${imgIdx}`} className="my-6 relative group/image">
+                                                                    <img src={imageUrls[imageIndex]} alt={`Screenshot for step ${textStepCounter}`} className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200 dark:border-slate-700" />
+                                                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                                                                        <button onClick={() => onAnnotateImage(imageIndex)} className="flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform"><AnnotateIcon className="w-5 h-5" />Annotate</button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })}
                                                 </div>
                                             </div>
-                                            {block.imageSteps.map((imageStep, imgIdx) => {
-                                                const imageIndex = parseInt(imageStep.content, 10) - 1;
-                                                if (imageIndex >= 0 && imageIndex < imageUrls.length) {
-                                                    return (
-                                                        <div key={`${block.textStepIndex}-${imgIdx}`} className="my-6 relative group/image">
-                                                            <img src={imageUrls[imageIndex]} alt={`Screenshot for step ${textStepCounter}`} className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200 dark:border-slate-700" />
-                                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                                                                <button onClick={() => onAnnotateImage(imageIndex)} className="flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform"><AnnotateIcon className="w-5 h-5" />Annotate</button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            })}
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                )}
+                                <Inserter 
+                                    isVisible={hoveredInsertIndex === blockIndex}
+                                    onHover={() => setHoveredInsertIndex(blockIndex)}
+                                    onLeave={() => setHoveredInsertIndex(null)}
+                                    onClick={() => handleInsertStep(blockIndex)}
+                                />
+                           </React.Fragment>
                         );
                     })}
                 </div>

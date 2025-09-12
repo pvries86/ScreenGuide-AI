@@ -92,7 +92,11 @@ const App: React.FC = () => {
     if (savedTheme) setTheme(savedTheme);
     else if (prefersDark) setTheme('dark');
     const savedApiKey = localStorage.getItem('gemini-api-key');
-    if (savedApiKey) setApiKey(savedApiKey);
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    } else {
+      setIsSettingsOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -245,7 +249,10 @@ const App: React.FC = () => {
 
   const handleImagesChange = (files: File[]) => {
     if (instructionSteps.length > 0) {
-      resetDocumentState({ title: '', steps: [] });
+      // Don't reset if we are adding images to an existing guide
+      // resetDocumentState({ title: '', steps: [] });
+    } else {
+        resetDocumentState({ title: '', steps: [] });
     }
     setImages(files);
     setError(null);
@@ -267,26 +274,47 @@ const App: React.FC = () => {
   };
 
   const handleRegenerateStep = async (stepIndex: number, mode: RegenerationMode): Promise<void> => {
+    if (!apiKey) {
+        setError("Please set your Gemini API key in the settings before regenerating.");
+        setIsSettingsOpen(true);
+        throw new Error("API key not set."); // Throw to stop the loading spinner in InstructionDisplay
+    }
     setRegeneratingIndex(stepIndex);
     setError(null);
     try {
       const currentStep = instructionSteps[stepIndex];
       if (currentStep.type !== 'text') throw new Error("Can only regenerate text steps.");
+      
       let associatedImage: File | null = null;
+      // Search for an image step that logically follows the text step before the next text step
       for (let i = stepIndex + 1; i < instructionSteps.length; i++) {
-        if (instructionSteps[i].type === 'image') {
-          const imageIndex = parseInt(instructionSteps[i].content, 10) - 1;
-          if (imageIndex >= 0 && imageIndex < images.length) associatedImage = images[imageIndex];
-          break;
+        const nextStep = instructionSteps[i];
+        if (nextStep.type === 'image') {
+          const imageIndex = parseInt(nextStep.content, 10) - 1;
+          if (imageIndex >= 0 && imageIndex < images.length) {
+            associatedImage = images[imageIndex];
+            // We found the first image of the block, that's enough context
+            break; 
+          }
+        }
+        // If we hit another text step, it means the current step has no images.
+        if (nextStep.type === 'text') {
+            break;
         }
       }
-      if (!associatedImage) throw new Error("Could not find an associated image for this step.");
+
       let previousStep: string | null = null;
       for (let i = stepIndex - 1; i >= 0; i--) if (instructionSteps[i].type === 'text') { previousStep = instructionSteps[i].content; break; }
       let nextStep: string | null = null;
       for (let i = stepIndex + 1; i < instructionSteps.length; i++) if (instructionSteps[i].type === 'text') { nextStep = instructionSteps[i].content; break; }
 
-      const newContent = await regenerateInstruction(associatedImage, language, { previousStep, currentStep: currentStep.content, nextStep }, mode, apiKey);
+      const newContent = await regenerateInstruction(
+        associatedImage, 
+        language, 
+        { previousStep, currentStep: currentStep.content, nextStep }, 
+        mode, 
+        apiKey
+      );
       
       const newSteps = [...instructionSteps];
       newSteps[stepIndex] = { ...newSteps[stepIndex], content: newContent };
@@ -303,6 +331,11 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = useCallback(async () => {
+    if (!apiKey) {
+      setError("Please set your Gemini API key in the settings before generating.");
+      setIsSettingsOpen(true);
+      return;
+    }
     if (images.length === 0) {
       setError('Please upload at least one screenshot.');
       return;
@@ -322,9 +355,14 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [images, language, apiKey, instructionSteps.length, setDocumentState, resetDocumentState]);
+  }, [apiKey, images, language, instructionSteps.length, setDocumentState, resetDocumentState]);
 
   const handleMergeInstructions = async () => {
+    if (!apiKey) {
+      setError("Please set your Gemini API key in the settings before merging.");
+      setIsSettingsOpen(true);
+      return;
+    }
     setIsMerging(true);
     setError(null);
     try {

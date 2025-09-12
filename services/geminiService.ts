@@ -165,7 +165,7 @@ Your generated instruction must logically connect the previous and next steps in
 };
 
 export const regenerateInstruction = async (
-  image: File,
+  image: File | null,
   language: Language,
   context: {
     previousStep: string | null;
@@ -185,7 +185,9 @@ export const regenerateInstruction = async (
       modificationInstruction = 'Rewrite it to be more concise and to the point.';
       break;
     case 'longer':
-      modificationInstruction = 'Rewrite it to be more detailed and descriptive, adding more information if possible based on the image.';
+      modificationInstruction = image
+        ? 'Rewrite it to be more detailed and descriptive, adding more information if possible based on the image.'
+        : 'Rewrite it to be more detailed and descriptive.';
       break;
     case 'simpler':
       modificationInstruction = 'Rewrite it in simpler terms, as if explaining to a non-technical user or a complete beginner.';
@@ -199,12 +201,15 @@ export const regenerateInstruction = async (
       break;
   }
 
-  let prompt = `You are an expert technical writer. Your task is to rewrite a single instruction step based on the provided screenshot. The language for the new instruction must be ${languageName}.
-The screenshot may contain annotations like red boxes or arrows highlighting the key element. Refer to these highlights in your rewritten instruction.
+  let prompt = `You are an expert technical writer. Your task is to rewrite a single instruction step. The new instruction must be in ${languageName}.`;
 
-The current instruction is: "${currentStep}"
+  if (image) {
+    prompt += ` The instruction should be based on the provided screenshot. The screenshot may contain annotations like red boxes or arrows highlighting the key element. Refer to these highlights in your rewritten instruction.`;
+  } else {
+    prompt += ` The instruction should be rewritten based on its content and the surrounding context provided.`;
+  }
 
-Your task is: ${modificationInstruction}`;
+  prompt += `\n\nThe current instruction is: "${currentStep}"`;
 
   if (previousStep) {
     prompt += `\n\nThe previous step was: "${previousStep}"`;
@@ -213,18 +218,25 @@ Your task is: ${modificationInstruction}`;
     prompt += `\n\nThe next step is: "${nextStep}"`;
   }
 
-  prompt += `\n\nAnalyze the screenshot and provide the rewritten instruction. Return ONLY the new instruction text, with no extra formatting, labels, or quotation marks.`;
+  prompt += `\n\nYour task is: ${modificationInstruction}`;
 
-  const imagePart = {
-    inlineData: {
-      data: await fileToBase64(image),
-      mimeType: image.type,
-    },
-  };
+  prompt += `\n\nReturn ONLY the new instruction text, with no extra formatting, labels, or quotation marks.`;
+
+  // FIX: Explicitly type `contentParts` to allow both text and image parts.
+  const contentParts: ({ text: string; } | { inlineData: { data: string; mimeType: string; }; })[] = [{ text: prompt }];
+  if (image) {
+    const imagePart = {
+      inlineData: {
+        data: await fileToBase64(image),
+        mimeType: image.type,
+      },
+    };
+    contentParts.push(imagePart);
+  }
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: { parts: [{ text: prompt }, imagePart] },
+    contents: { parts: contentParts },
   });
 
   return response.text.trim();
