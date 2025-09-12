@@ -30,6 +30,15 @@ interface Handle {
     cursor: string;
 }
 
+interface TextEditingState {
+  x: number; // canvas-space X
+  y: number; // canvas-space Y
+  sx: number; // screen-space X relative to <main>
+  sy: number; // screen-space Y relative to <main>
+  value: string;
+  id?: number; // when editing existing text annotation
+}
+
 // --- Props ---
 interface ImageAnnotatorProps {
   isOpen: boolean;
@@ -42,6 +51,7 @@ interface ImageAnnotatorProps {
 const HANDLE_SIZE = 8;
 const colors = [
     { name: 'Red', value: '#ef4444' },
+    { name: 'Black', value: '#000000ff' },    
     { name: 'Blue', value: '#3b82f6' },
     { name: 'Green', value: '#22c55e' },
     { name: 'Yellow', value: '#eab308' },
@@ -140,6 +150,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   
   const [tool, setTool] = useState<AnnotationTool>('select');
   const [color, setColor] = useState<string>('#ef4444');
@@ -152,7 +163,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<number | null>(null);
   
-  const [textEditing, setTextEditing] = useState<{ x: number, y: number, value: string } | null>(null);
+  const [textEditing, setTextEditing] = useState<TextEditingState | null>(null);
 
   const initialState = useRef<{ annotation: Annotation | null, mousePos: Point }>({ annotation: null, mousePos: { x: 0, y: 0 } });
   
@@ -162,6 +173,16 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     if (textEditing && textareaRef.current) {
         textareaRef.current.focus();
     }
+  }, [textEditing]);
+
+  useEffect(() => {
+    if (!textEditing) return;
+    const update = () => {
+        const pos = canvasToMain({ x: textEditing.x, y: textEditing.y });
+        setTextEditing(prev => prev ? { ...prev, sx: pos.x, sy: pos.y } : prev);
+    };
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, [textEditing]);
 
   const redrawCanvas = useCallback(() => {
@@ -295,20 +316,40 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
+const canvasToMain = (p: Point): Point => {
+  const canvas = canvasRef.current; const main = mainRef.current;
+  if (!canvas || !main) return p;
+  const cRect = canvas.getBoundingClientRect();
+  const mRect = main.getBoundingClientRect();
+  // ✅ account for scroll inside <main>
+  return {
+    x: p.x + (cRect.left - mRect.left) + main.scrollLeft,
+    y: p.y + (cRect.top - mRect.top) + main.scrollTop,
+  };
+};
+
+
   const commitText = (text: string, position: Point) => {
-    if (text.trim()) {
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
+    const val = text.trim();
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
 
-        const fontSize = 12 + (lineWidth * 2);
-        ctx.font = `${fontSize}px sans-serif`;
-        const lines = text.split('\n');
-        const lineHeight = fontSize * 1.2;
-        const textWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
-        const textHeight = lines.length * lineHeight;
+    if (!val) { setTextEditing(null); return; }
 
+    const fontSize = 12 + (lineWidth * 2);
+    ctx.font = `${fontSize}px sans-serif`;
+    const lines = val.split('\n');
+    const lineHeight = fontSize * 1.2;
+    const textWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+    const textHeight = lines.length * lineHeight;
+
+    if (textEditing?.id) {
+        const id = textEditing.id;
+        setHistory(prev => prev.map(a => a.id === id ? { ...a, text: val, start: position, end: { x: position.x + textWidth, y: position.y + textHeight } } : a));
+        setSelectedAnnotationId(id);
+    } else {
         const newAnnotation: Annotation = {
-            id: Date.now(), type: 'text', color, lineWidth, rotation: 0, text,
+            id: Date.now(), type: 'text', color, lineWidth, rotation: 0, text: val,
             start: position,
             end: { x: position.x + textWidth, y: position.y + textHeight },
         };
@@ -321,6 +362,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (textEditing) {
+        // Commit when clicking outside the textarea (canvas click)
         commitText(textEditing.value, { x: textEditing.x, y: textEditing.y });
         return;
     }
@@ -328,9 +370,12 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     const mousePos = getCanvasPoint(e);
 
     if (tool === 'text') {
-        setTextEditing({ x: mousePos.x, y: mousePos.y, value: '' });
-        return;
+    const base = { x: mousePos.x + 5, y: mousePos.y + 5 };
+    const screen = canvasToMain(base);
+    setTimeout(() => setTextEditing({ x: base.x, y: base.y, sx: screen.x, sy: screen.y, value: '' }), 0);
+    return;
     }
+
 
     let clickedOnHandle: Handle | null = null;
     let clickedAnnotation: Annotation | null = null;
@@ -491,6 +536,22 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     }
   };
   
+  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const mousePos = getCanvasPoint(e);
+    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
+    for (let i = history.length - 1; i >= 0; i--) {
+        const ann = history[i];
+        if (isPointInsideAnnotation(mousePos, ann, ctx)) {
+            if (ann.type === 'text') {
+                const screen = canvasToMain(ann.start);
+                setTextEditing({ x: ann.start.x, y: ann.start.y, sx: screen.x, sy: screen.y, value: ann.text || '', id: ann.id });
+                setSelectedAnnotationId(ann.id);
+            }
+            break;
+        }
+    }
+  };
+
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (currentAction === 'drawing' && startPoint) {
         const endPoint = getCanvasPoint(e);
@@ -619,12 +680,13 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                     <button onClick={handleSave} className="px-4 py-2 text-sm font-semibold rounded-md bg-primary hover:bg-secondary">Save Changes</button>
                 </div>
             </header>
-            <main className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
+            <main ref={mainRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
                 <canvas ref={canvasRef} className="max-w-full max-h-full object-contain rounded-md shadow-lg" 
-                    style={{ cursor: canvasCursor }}
+                    style={{ cursor: canvasCursor, zIndex: 0 }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
+                    onDoubleClick={handleDoubleClick}
                     onMouseLeave={() => { if (currentAction !== 'none') handleMouseUp(new MouseEvent('mouseup') as any); }}
                 />
                  {textEditing && (
@@ -645,8 +707,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                         }}
                         style={{
                             position: 'absolute',
-                            left: `${textEditing.x}px`,
-                            top: `${textEditing.y}px`,
+                            left: `${textEditing.sx}px`,
+                            top: `${textEditing.sy}px`,
                             fontSize: `${12 + lineWidth * 2}px`,
                             lineHeight: 1.2,
                             fontFamily: 'sans-serif',
