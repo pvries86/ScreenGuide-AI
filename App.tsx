@@ -8,7 +8,7 @@ import { ImageAnnotator } from './components/ImageAnnotator';
 import { ConfirmModal } from './components/ConfirmModal';
 import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
@@ -17,6 +17,18 @@ interface DocumentState {
   title: string;
   steps: InstructionStep[];
 }
+
+const convertFilesToExportedImages = (files: File[]): Promise<ExportedImage[]> => {
+    const imagePromises = files.map(async (file) => {
+        const reader = new FileReader();
+        return new Promise<ExportedImage>((resolve, reject) => {
+            reader.onload = () => resolve({ name: file.name, type: file.type, lastModified: file.lastModified, data: reader.result as string });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    });
+    return Promise.all(imagePromises);
+};
 
 const App: React.FC = () => {
   // Session State
@@ -46,7 +58,9 @@ const App: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [annotatingImageIndex, setAnnotatingImageIndex] = useState<number | null>(null);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState<boolean>(false);
-  
+  const [isRecoveryPromptOpen, setIsRecoveryPromptOpen] = useState<boolean>(false);
+  const [recoveredSession, setRecoveredSession] = useState<ExportedSession | null>(null);
+
   // Settings State
   const [apiKey, setApiKey] = useState<string>('');
   const [theme, setTheme] = useState<Theme>('light');
@@ -56,6 +70,54 @@ const App: React.FC = () => {
   
   // Derived state for unsaved changes
   const isModified = canUndo;
+
+  // --- Session Recovery on Load ---
+  useEffect(() => {
+    try {
+        const savedJson = localStorage.getItem('auto-saved-session');
+        if (savedJson) {
+            const session: ExportedSession = JSON.parse(savedJson);
+            if (session && session.steps && (session.steps.length > 0 || session.title)) {
+                setRecoveredSession(session);
+                setIsRecoveryPromptOpen(true);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load auto-saved session:", e);
+        localStorage.removeItem('auto-saved-session'); // Clear corrupted data
+    }
+  }, []);
+
+  // --- Auto-Save Feature ---
+  useEffect(() => {
+    const performAutoSave = async () => {
+        if (!isModified) return;
+        try {
+            const exportedImages = await convertFilesToExportedImages(images);
+            const sessionToSave: ExportedSession = { ...documentState, images: exportedImages };
+            localStorage.setItem('auto-saved-session', JSON.stringify(sessionToSave));
+        } catch (e) {
+            console.error("Auto-save failed:", e);
+        }
+    };
+
+    const intervalId = setInterval(performAutoSave, 60000); // Auto-save every 60 seconds
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+        if (isModified) {
+            event.preventDefault();
+            event.returnValue = 'You have unsaved changes that may be lost.';
+        }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+        clearInterval(intervalId);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isModified, documentState, images]);
+
 
   // --- Keyboard Shortcuts for Undo/Redo ---
   useEffect(() => {
@@ -131,6 +193,7 @@ const App: React.FC = () => {
     resetDocumentState({ title: '', steps: [] });
     setCurrentSessionId(null);
     setError(null);
+    localStorage.removeItem('auto-saved-session');
   };
 
   const handleSaveSession = async () => {
@@ -153,6 +216,7 @@ const App: React.FC = () => {
       }
       await loadSessions();
       resetDocumentState(documentState); // Commit current state as the new baseline
+      localStorage.removeItem('auto-saved-session');
     } catch (e) {
       console.error(e);
       setError("Failed to save the session.");
@@ -172,6 +236,7 @@ const App: React.FC = () => {
         resetDocumentState({ title: session.title, steps: session.steps });
         setImages(session.images);
         setCurrentSessionId(session.id);
+        localStorage.removeItem('auto-saved-session');
       } else {
         throw new Error("Session not found in the database.");
       }
@@ -202,20 +267,11 @@ const App: React.FC = () => {
     }
 
     try {
-      const imagePromises = images.map(async (file) => {
-        const reader = new FileReader();
-        return new Promise<{ name: string; type: string; lastModified: number; data: string }>((resolve, reject) => {
-            reader.onload = () => resolve({ name: file.name, type: file.type, lastModified: file.lastModified, data: reader.result as string });
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-      });
-  
-      const exportedImages = await Promise.all(imagePromises);
+      const exportedImages = await convertFilesToExportedImages(images);
       const exportedSession: ExportedSession = { title, steps: instructionSteps, images: exportedImages };
       const jsonString = JSON.stringify(exportedSession, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
       const filename = (title || 'untitled-session').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const blob = new Blob([jsonString], { type: 'application/json' });
       window.saveAs(blob, `${filename}.json`);
     } catch(e) {
         console.error("Failed to export session:", e);
@@ -238,6 +294,7 @@ const App: React.FC = () => {
         const newId = await db.addSession(newSessionData);
         await loadSessions();
         await handleLoadSession(newId);
+        localStorage.removeItem('auto-saved-session');
       } catch (e) {
         console.error("Failed to import session:", e);
         setError("Could not import session. The file might be corrupted or in the wrong format.");
@@ -245,6 +302,32 @@ const App: React.FC = () => {
     };
     reader.onerror = () => { setError("Error reading the selected file."); };
     reader.readAsText(file);
+  };
+
+  // --- Auto-Save Recovery Handlers ---
+  const handleRestoreAutoSave = () => {
+    if (!recoveredSession) return;
+    try {
+        const importedImages = recoveredSession.images.map(imgData => 
+            base64ToFile(imgData.data, imgData.name, imgData.type, imgData.lastModified)
+        );
+        resetDocumentState({ title: recoveredSession.title, steps: recoveredSession.steps });
+        setImages(importedImages);
+        setCurrentSessionId(null);
+    } catch (e) {
+        console.error("Failed to restore session:", e);
+        setError("Could not restore the auto-saved session. It might be corrupted.");
+    } finally {
+        localStorage.removeItem('auto-saved-session');
+        setIsRecoveryPromptOpen(false);
+        setRecoveredSession(null);
+    }
+  };
+
+  const handleDiscardAutoSave = () => {
+      localStorage.removeItem('auto-saved-session');
+      setIsRecoveryPromptOpen(false);
+      setRecoveredSession(null);
   };
 
   // --- Instruction Generation & Modification ---
@@ -332,7 +415,7 @@ const App: React.FC = () => {
     }
   };
 
-  const generateAll = useCallback(async () => {
+  const generateAll = async () => {
     if (!apiKey) {
       setError("Please set your Gemini API key in the settings before generating.");
       setIsSettingsOpen(true);
@@ -344,11 +427,10 @@ const App: React.FC = () => {
     }
     setIsLoading(true);
     setError(null);
-    resetDocumentState({ title: '', steps: [] });
-
+    
     try {
       const { title: newTitle, steps } = await generateInstructions(images, language, apiKey);
-      setDocumentState({ title: newTitle, steps });
+      resetDocumentState({ title: newTitle, steps });
     } catch (e) {
       console.error(e);
       const errorMessage = e instanceof Error ? e.message : 'Failed to generate instructions. Please check your API key and try again.';
@@ -356,7 +438,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, images, language, setDocumentState, resetDocumentState]);
+  };
 
   const handleGenerate = () => {
     if (instructionSteps.length > 0) {
@@ -492,6 +574,12 @@ const App: React.FC = () => {
         message="This will regenerate the entire guide and replace any changes you've made. Are you sure?"
         onConfirm={handleConfirmGenerate}
         onCancel={handleCancelGenerate}
+      />
+       <ConfirmModal
+        isOpen={isRecoveryPromptOpen}
+        message="We found an unsaved session from your last visit. Would you like to restore it?"
+        onConfirm={handleRestoreAutoSave}
+        onCancel={handleDiscardAutoSave}
       />
       <ImageAnnotator isOpen={annotatingImageIndex !== null} onClose={handleCloseAnnotator} imageFile={annotatingImageIndex !== null ? images[annotatingImageIndex] : null} onSave={handleSaveAnnotatedImage} />
     </div>
