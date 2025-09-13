@@ -5,6 +5,7 @@ import { InstructionDisplay } from './components/InstructionDisplay';
 import { LanguageToggle } from './components/LanguageToggle';
 import { SettingsModal } from './components/SettingsModal';
 import { ImageAnnotator } from './components/ImageAnnotator';
+import { ConfirmModal } from './components/ConfirmModal';
 import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
 import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme } from './types';
@@ -44,6 +45,7 @@ const App: React.FC = () => {
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [annotatingImageIndex, setAnnotatingImageIndex] = useState<number | null>(null);
+  const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState<boolean>(false);
   
   // Settings State
   const [apiKey, setApiKey] = useState<string>('');
@@ -330,7 +332,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGenerate = useCallback(async () => {
+  const generateAll = useCallback(async () => {
     if (!apiKey) {
       setError("Please set your Gemini API key in the settings before generating.");
       setIsSettingsOpen(true);
@@ -340,7 +342,6 @@ const App: React.FC = () => {
       setError('Please upload at least one screenshot.');
       return;
     }
-    if (instructionSteps.length > 0 && !window.confirm("This will regenerate the entire guide and replace any changes you've made. Are you sure?")) return;
     setIsLoading(true);
     setError(null);
     resetDocumentState({ title: '', steps: [] });
@@ -355,7 +356,24 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, images, language, instructionSteps.length, setDocumentState, resetDocumentState]);
+  }, [apiKey, images, language, setDocumentState, resetDocumentState]);
+
+  const handleGenerate = () => {
+    if (instructionSteps.length > 0) {
+      setIsGenerateConfirmOpen(true);
+    } else {
+      void generateAll();
+    }
+  };
+
+  const handleConfirmGenerate = () => {
+    setIsGenerateConfirmOpen(false);
+    void generateAll();
+  };
+
+  const handleCancelGenerate = () => {
+    setIsGenerateConfirmOpen(false);
+  };
 
   const handleMergeInstructions = async () => {
     if (!apiKey) {
@@ -469,6 +487,12 @@ const App: React.FC = () => {
         </div>
       </main>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
+      <ConfirmModal
+        isOpen={isGenerateConfirmOpen}
+        message="This will regenerate the entire guide and replace any changes you've made. Are you sure?"
+        onConfirm={handleConfirmGenerate}
+        onCancel={handleCancelGenerate}
+      />
       <ImageAnnotator isOpen={annotatingImageIndex !== null} onClose={handleCloseAnnotator} imageFile={annotatingImageIndex !== null ? images[annotatingImageIndex] : null} onSave={handleSaveAnnotatedImage} />
     </div>
   );
