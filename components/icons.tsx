@@ -285,6 +285,16 @@ export const PencilIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+export const BlurIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+        <path d="M19.88 18.49a3.003 3.003 0 0 0-2.37-2.37A3 3 0 0 0 15 15a3 3 0 0 0-1.51.12 3 3 0 0 0-2.37 2.37A3 3 0 0 0 9 21a3 3 0 0 0 3 3 3 3 0 0 0 3-3c0-.57-.16-1.1-.42-1.51ZM12 21a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/>
+        <path d="M8.12 5.51A3 3 0 0 0 9 9a3 3 0 0 0 3-3c0-.57-.16-1.1-.42-1.51a3.003 3.003 0 0 0-2.37-2.37A3 3 0 0 0 6 0a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.57 0 1.1-.16 1.51-.42A3.003 3.003 0 0 0 8.12 5.51ZM6 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>
+        <path d="M21 9a3 3 0 0 0-3-3c-.57 0-1.1.16-1.51.42a3.003 3.003 0 0 0-2.37 2.37A3 3 0 0 0 12 9a3 3 0 0 0 3 3c.57 0 1.1-.16 1.51-.42a3.003 3.003 0 0 0 2.37-2.37A3 3 0 0 0 21 9Zm-3 3a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/>
+        <path d="M3 15a3 3 0 0 0 3 3c.57 0 1.1-.16 1.51-.42a3.003 3.003 0 0 0 2.37-2.37A3 3 0 0 0 9 15a3 3 0 0 0-3-3c-.57 0-1.1.16-1.51.42A3.003 3.003 0 0 0 2.12 14.51 3 3 0 0 0 0 18a3 3 0 0 0 3 3Zm0-3a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>
+    </svg>
+);
+
 export const EraserIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />

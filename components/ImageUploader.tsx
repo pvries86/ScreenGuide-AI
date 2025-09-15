@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { UploadIcon, CloseIcon } from './icons';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { UploadIcon, CloseIcon, DragHandleIcon } from './icons';
 
 interface ImageUploaderProps {
   onImagesChange: (files: File[]) => void;
@@ -9,6 +9,12 @@ interface ImageUploaderProps {
 export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, images }) => {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Using refs for drag state to prevent re-renders on every drag-over event
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+  // Using a state to force re-render for visual feedback
+  const [, setForceUpdate] = useState(0);
 
   // Effect to sync internal state when external `images` prop changes
   useEffect(() => {
@@ -44,7 +50,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
         ))
     );
     
-    uniqueFiles.sort((a, b) => a.lastModified - b.lastModified);
+    // Manual sorting is now possible, so we remove automatic sorting.
+    // uniqueFiles.sort((a, b) => a.lastModified - b.lastModified);
     
     onImagesChange(uniqueFiles);
 
@@ -70,24 +77,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
     onImagesChange(newFiles);
   }, [images, onImagesChange]);
   
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragEnterZone = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeaveZone = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
   };
   
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOverZone = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDropZone = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -95,14 +102,49 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
       handleAddFiles(Array.from(e.dataTransfer.files));
     }
   };
+  
+  // Drag-and-drop handlers for sorting image previews
+  const handleSortDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    dragItem.current = index;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleSortDragEnter = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    dragOverItem.current = index;
+    setForceUpdate(val => val + 1); // Force re-render for visual feedback
+  };
+
+  const handleSortDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const handleSortDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
+      const newImages = [...images];
+      const draggedItemContent = newImages.splice(dragItem.current, 1)[0];
+      newImages.splice(dragOverItem.current, 0, draggedItemContent);
+      onImagesChange(newImages);
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setForceUpdate(val => val + 1);
+  };
+
+  const handleSortDragEnd = () => {
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setForceUpdate(val => val + 1);
+  };
 
   return (
     <div>
       <div
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        onDragEnter={handleDragEnterZone}
+        onDragLeave={handleDragLeaveZone}
+        onDragOver={handleDragOverZone}
+        onDrop={handleDropZone}
         className={`relative flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-300
         ${isDragging ? 'border-primary bg-indigo-50 dark:bg-primary/10' : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:border-primary dark:hover:border-primary'}`}
       >
@@ -129,16 +171,34 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
         </div>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400 text-center mt-2">
-        * Screenshots are automatically sorted by their timestamp.
+        * You can drag and drop screenshots to change their order.
       </p>
 
       {imagePreviews.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-3">Selected Screenshots (Sorted):</h3>
+          <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-3">Selected Screenshots:</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {imagePreviews.map((src, index) => (
-              <div key={`${images[index]?.name}-${src}`} className="relative aspect-video rounded-lg overflow-hidden shadow-md border border-slate-200 dark:border-slate-700 group">
+            {imagePreviews.map((src, index) => {
+              const isBeingDragged = dragItem.current === index;
+              const isDragTarget = dragOverItem.current === index;
+              return (
+              <div 
+                key={`${images[index]?.name}-${src}`} 
+                className={`relative aspect-video rounded-lg overflow-hidden shadow-md border border-slate-200 dark:border-slate-700 group cursor-grab transition-all duration-200
+                  ${isBeingDragged ? 'opacity-40 scale-95' : 'opacity-100 scale-100'}
+                  ${isDragTarget && !isBeingDragged ? 'ring-2 ring-primary' : ''}
+                `}
+                draggable
+                onDragStart={(e) => handleSortDragStart(e, index)}
+                onDragEnter={(e) => handleSortDragEnter(e, index)}
+                onDragOver={handleSortDragOver}
+                onDrop={handleSortDrop}
+                onDragEnd={handleSortDragEnd}
+              >
                 <img src={src} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <DragHandleIcon className="w-8 h-8 text-white" />
+                </div>
                  <div className="absolute top-1 left-1 bg-primary text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-lg z-10">
                   {index + 1}
                 </div>
@@ -150,7 +210,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
                   <CloseIcon className="w-4 h-4" />
                 </button>
               </div>
-            ))}
+            );
+          })}
           </div>
         </div>
       )}

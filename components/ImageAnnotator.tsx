@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { base64ToFile } from '../utils/fileUtils';
-import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon, CropIcon } from './icons';
+import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon, CropIcon, BlurIcon } from './icons';
 
 // --- Types ---
-type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop';
+type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop' | 'blur';
 type LineWidth = 2 | 4 | 8;
 type Action = 'none' | 'drawing' | 'moving' | 'resizing' | 'rotating' | 'cropping';
 type HandleKey = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'rotate';
@@ -48,7 +48,6 @@ interface ImageAnnotatorProps {
 }
 
 // --- Constants ---
-const HANDLE_SIZE = 8;
 const colors = [
     { name: 'Red', value: '#ef4444' },
     { name: 'Black', value: '#000000ff' },    
@@ -57,6 +56,8 @@ const colors = [
     { name: 'Yellow', value: '#eab308' },
     { name: 'Purple', value: '#a855f7' },
 ];
+
+const HANDLE_SIZE = 8;
 
 // --- Geometry Helper Functions ---
 const rotatePoint = (point: Point, center: Point, angle: number): Point => {
@@ -202,30 +203,52 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // 1. Draw base image
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     
+    // 2. Apply blur annotations
+    history.filter(ann => ann.type === 'blur').forEach(annotation => {
+        ctx.save();
+        const bounds = getAnnotationBounds(annotation);
+        const center = getAnnotationCenter(annotation);
+
+        // Set up the rotated clipping region
+        ctx.translate(center.x, center.y);
+        ctx.rotate(annotation.rotation);
+        ctx.translate(-center.x, -center.y);
+        ctx.beginPath();
+        ctx.rect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+        ctx.clip();
+
+        // Apply blur
+        ctx.filter = `blur(${annotation.lineWidth * 1.5}px)`;
+
+        // Undo the rotation to draw the image aligned with the canvas
+        ctx.translate(center.x, center.y);
+        ctx.rotate(-annotation.rotation);
+        ctx.translate(-center.x, -center.y);
+
+        // Draw the original image again. The filter and clip will make only the desired portion appear blurred.
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        
+        ctx.restore(); // Clears filter, clip, and transforms
+    });
+
     if (tool === 'crop' && cropRect) {
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         const { x, y, width, height } = cropRect;
-        // Use path winding rule to fill the area *outside* the crop rectangle
         ctx.beginPath();
-        // Outer rectangle (the entire canvas)
         ctx.rect(0, 0, canvas.width, canvas.height);
-        // Inner rectangle (the crop area)
         ctx.rect(x, y, width, height);
-        // Fill using the 'evenodd' rule, which creates a hole where the inner rectangle is.
         ctx.fill('evenodd');
         ctx.restore();
-
-        // Draw border and handles for the crop area itself
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 1;
         ctx.setLineDash([6, 3]);
         ctx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
         ctx.setLineDash([]);
-        
         ctx.fillStyle = 'white';
         getCropHandles(cropRect).forEach(handle => {
              ctx.fillRect(handle.position.x - HANDLE_SIZE / 2, handle.position.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
@@ -235,15 +258,14 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    history.forEach(annotation => {
-        const { id, type, text, points, rotation } = annotation;
+    // 3. Draw shape/text annotations
+    history.filter(ann => ann.type !== 'blur').forEach(annotation => {
+        const { type, text, points, rotation } = annotation;
         const center = getAnnotationCenter(annotation);
-
         ctx.save();
         ctx.translate(center.x, center.y);
         ctx.rotate(rotation);
         ctx.translate(-center.x, -center.y);
-        
         ctx.strokeStyle = annotation.color;
         ctx.fillStyle = annotation.color;
         ctx.lineWidth = annotation.lineWidth;
@@ -282,31 +304,43 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                 ctx.fillText(line, annotation.start.x, annotation.start.y + (i * lineHeight));
             });
         }
-
-        if (id === selectedAnnotationId) {
-            ctx.strokeStyle = 'rgba(60, 130, 255, 0.9)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([6, 3]);
-            ctx.strokeRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
-            ctx.setLineDash([]);
-            
-            getAnnotationHandles(annotation).forEach(handle => {
-                ctx.save();
-                ctx.translate(handle.position.x, handle.position.y);
-                ctx.rotate(-rotation);
-                ctx.translate(-handle.position.x, -handle.position.y);
-                ctx.fillStyle = handle.key === 'rotate' ? '#f59e0b' : 'white';
-                ctx.strokeStyle = 'black';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.arc(handle.position.x, handle.position.y, HANDLE_SIZE / 2, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
-            });
-        }
         ctx.restore();
     });
+
+    // 4. Draw selection handles
+    const selectedAnn = history.find(a => a.id === selectedAnnotationId);
+    if (selectedAnn) {
+        const { rotation } = selectedAnn;
+        const center = getAnnotationCenter(selectedAnn);
+        const bounds = getAnnotationBounds(selectedAnn);
+
+        ctx.save();
+        ctx.translate(center.x, center.y);
+        ctx.rotate(rotation);
+        ctx.translate(-center.x, -center.y);
+        
+        ctx.strokeStyle = selectedAnn.type === 'blur' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(60, 130, 255, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 3]);
+        ctx.strokeRect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+        ctx.setLineDash([]);
+        
+        getAnnotationHandles(selectedAnn).forEach(handle => {
+            ctx.save();
+            ctx.translate(handle.position.x, handle.position.y);
+            ctx.rotate(-rotation);
+            ctx.translate(-handle.position.x, -handle.position.y);
+            ctx.fillStyle = handle.key === 'rotate' ? '#f59e0b' : 'white';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(handle.position.x, handle.position.y, HANDLE_SIZE / 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+        ctx.restore();
+    }
   }, [history, selectedAnnotationId, tool, cropRect]);
 
     useEffect(() => {
@@ -321,8 +355,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                 if (newH > maxH) { newH = maxH; newW = newH * ar; }
                 canvas.width = newW; canvas.height = newH;
             } else { canvas.width = img.width; canvas.height = img.height; }
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            imageRef.current = img; redrawCanvas();
+            imageRef.current = img; 
+            redrawCanvas();
         };
         img.src = URL.createObjectURL(imageFile);
         return () => { URL.revokeObjectURL(img.src); imageRef.current = null; }
@@ -359,7 +393,6 @@ const canvasToMain = (p: Point): Point => {
   if (!canvas || !main) return p;
   const cRect = canvas.getBoundingClientRect();
   const mRect = main.getBoundingClientRect();
-  // ✅ account for scroll inside <main>
   return {
     x: p.x + (cRect.left - mRect.left) + main.scrollLeft,
     y: p.y + (cRect.top - mRect.top) + main.scrollTop,
@@ -516,7 +549,7 @@ const canvasToMain = (p: Point): Point => {
     if (currentAction === 'none') {
         let newCursor = 'default';
         if (tool === 'select') newCursor = 'grab';
-        if (['rectangle', 'circle', 'arrow', 'pencil'].includes(tool)) newCursor = 'crosshair';
+        if (['rectangle', 'circle', 'arrow', 'pencil', 'blur'].includes(tool)) newCursor = 'crosshair';
         if (tool === 'text') newCursor = 'text';
         if (tool === 'eraser') newCursor = 'crosshair';
 
@@ -605,8 +638,9 @@ const canvasToMain = (p: Point): Point => {
         const start = { x: Math.min(startPoint.x, mousePos.x), y: Math.min(startPoint.y, mousePos.y) };
         const end = { x: Math.max(startPoint.x, mousePos.x), y: Math.max(startPoint.y, mousePos.y) };
         const width = end.x-start.x; const height = end.y-start.y;
-        if (tool === 'rectangle') ctx.strokeRect(startPoint.x, startPoint.y, mousePos.x - startPoint.x, mousePos.y - startPoint.y);
-        else if (tool === 'circle') {
+        if (['rectangle', 'blur'].includes(tool)) {
+            ctx.strokeRect(startPoint.x, startPoint.y, mousePos.x - startPoint.x, mousePos.y - startPoint.y);
+        } else if (tool === 'circle') {
             ctx.beginPath();
             ctx.ellipse(start.x + width/2, start.y + height/2, width/2, height/2, 0, 0, 2*Math.PI);
             ctx.stroke();
@@ -692,22 +726,48 @@ const canvasToMain = (p: Point): Point => {
         const scaleX = originalImage.naturalWidth / canvas.width;
         const scaleY = originalImage.naturalHeight / canvas.height;
         
+        // 1. Draw base image
         tempCtx.drawImage(originalImage, 0, 0);
+        
+        // 2. Apply blur annotations
+        history.filter(ann => ann.type === 'blur').forEach(ann => {
+            const scaledAnn = { ...ann,
+                start: { x: ann.start.x * scaleX, y: ann.start.y * scaleY },
+                end: { x: ann.end.x * scaleX, y: ann.end.y * scaleY },
+                lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2) as LineWidth
+            };
+            const bounds = getAnnotationBounds(scaledAnn);
+            const center = getAnnotationCenter(scaledAnn);
+            
+            tempCtx.save();
+            tempCtx.filter = `blur(${scaledAnn.lineWidth * 1.5}px)`;
+            tempCtx.translate(center.x, center.y);
+            tempCtx.rotate(scaledAnn.rotation);
+            tempCtx.translate(-center.x, -center.y);
+            tempCtx.beginPath();
+            tempCtx.rect(bounds.minX, bounds.minY, bounds.width, bounds.height);
+            tempCtx.clip();
+            tempCtx.translate(center.x, center.y);
+            tempCtx.rotate(-scaledAnn.rotation);
+            tempCtx.translate(-center.x, -center.y);
+            tempCtx.drawImage(originalImage, 0, 0);
+            tempCtx.restore();
+        });
+
         tempCtx.lineCap = "round"; tempCtx.lineJoin = "round";
         
-        history.forEach(ann => {
+        // 3. Apply shape/text annotations
+        history.filter(ann => ann.type !== 'blur').forEach(ann => {
             const scaledAnn = { ...ann,
                 start: { x: ann.start.x * scaleX, y: ann.start.y * scaleY },
                 end: { x: ann.end.x * scaleX, y: ann.end.y * scaleY },
                 points: ann.points?.map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
                 lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2) as LineWidth
             };
-
             const center = getAnnotationCenter(scaledAnn);
             tempCtx.save();
             tempCtx.translate(center.x, center.y); tempCtx.rotate(scaledAnn.rotation); tempCtx.translate(-center.x, -center.y);
             tempCtx.strokeStyle = scaledAnn.color; tempCtx.fillStyle = scaledAnn.color; tempCtx.lineWidth = scaledAnn.lineWidth;
-            
             const bounds = getAnnotationBounds({
                 ...scaledAnn,
                 start: ann.type !== 'arrow' ? { x: Math.min(scaledAnn.start.x, scaledAnn.end.x), y: Math.min(scaledAnn.start.y, scaledAnn.end.y) } : scaledAnn.start,
@@ -775,8 +835,6 @@ const canvasToMain = (p: Point): Point => {
     const dataUrl = tempCanvas.toDataURL(imageFile.type);
     const newFile = base64ToFile(dataUrl, `cropped_${imageFile.name}`, imageFile.type, Date.now());
     
-    // Reset state and save the new file. The parent component will pass the new file back as a prop,
-    // which will trigger the useEffect to reload the canvas.
     setHistory([]);
     setSelectedAnnotationId(null);
     setCropRect(null);
@@ -794,7 +852,7 @@ const canvasToMain = (p: Point): Point => {
 
   const tools: { name: AnnotationTool; icon: JSX.Element }[] = [
     { name: 'select', icon: <SelectIcon /> }, { name: 'crop', icon: <CropIcon/> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
-    { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
+    { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'blur', icon: <BlurIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
   ];
   const lineSizes: { value: LineWidth, label: string }[] = [{ value: 2, label: 'S' }, { value: 4, label: 'M' }, { value: 8, label: 'L' }];
 
