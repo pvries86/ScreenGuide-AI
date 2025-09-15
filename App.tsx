@@ -6,9 +6,9 @@ import { LanguageToggle } from './components/LanguageToggle';
 import { SettingsModal } from './components/SettingsModal';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { ConfirmModal } from './components/ConfirmModal';
-import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/llmService';
+import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, LLMProvider, ApiKeys } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
@@ -62,11 +62,11 @@ const App: React.FC = () => {
   const [recoveredSession, setRecoveredSession] = useState<ExportedSession | null>(null);
 
   // Settings State
-  const [selectedModel, setSelectedModel] = useState<LLMProvider>('gemini');
-  const [apiKeys, setApiKeys] = useState<ApiKeys>({});
+  const [apiKey, setApiKey] = useState<string>('');
   const [theme, setTheme] = useState<Theme>('light');
   const [timeFormat, setTimeFormat] = useState<TimeFormat>('24h');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
   
   // Derived state for unsaved changes
@@ -125,6 +125,7 @@ const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
         // Don't interfere if user is typing in an input/textarea or a modal is open
         const activeEl = document.activeElement;
+        // FIX: Cast activeEl to HTMLElement to access isContentEditable property.
         const isEditing = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || (activeEl as HTMLElement)?.isContentEditable;
         if (isEditing || isSettingsOpen || annotatingImageIndex !== null) return;
 
@@ -159,16 +160,10 @@ const App: React.FC = () => {
     const savedTimeFormat = localStorage.getItem('time-format') as TimeFormat | null;
     if (savedTimeFormat) setTimeFormat(savedTimeFormat);
 
-    try {
-        const savedApiKeys = localStorage.getItem('apiKeys');
-        if (savedApiKeys) setApiKeys(JSON.parse(savedApiKeys));
-    } catch (e) { console.error("Could not load API keys", e); }
-    
-    const savedModel = localStorage.getItem('selectedModel') as LLMProvider | null;
-    if (savedModel) setSelectedModel(savedModel);
-
-    const currentKey = (apiKeys as any)[selectedModel];
-    if (!currentKey) {
+    const savedApiKey = localStorage.getItem('gemini-api-key');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    } else {
       setIsSettingsOpen(true);
     }
   }, []);
@@ -183,13 +178,9 @@ const App: React.FC = () => {
     localStorage.setItem('time-format', timeFormat);
   }, [timeFormat]);
 
-  useEffect(() => {
-    localStorage.setItem('selectedModel', selectedModel);
-  }, [selectedModel]);
-
-  const handleApiKeysSave = (newKeys: ApiKeys) => {
-    setApiKeys(newKeys);
-    localStorage.setItem('apiKeys', JSON.stringify(newKeys));
+  const handleApiKeySave = (newKey: string) => {
+    setApiKey(newKey);
+    localStorage.setItem('gemini-api-key', newKey);
   };
 
   // --- Session Management Callbacks ---
@@ -353,6 +344,7 @@ const App: React.FC = () => {
   const handleImagesChange = (files: File[]) => {
     if (instructionSteps.length > 0) {
       // Don't reset if we are adding images to an existing guide
+      // resetDocumentState({ title: '', steps: [] });
     } else {
         resetDocumentState({ title: '', steps: [] });
     }
@@ -376,9 +368,8 @@ const App: React.FC = () => {
   };
 
   const handleRegenerateStep = async (stepIndex: number, mode: RegenerationMode): Promise<void> => {
-    const apiKey = apiKeys[selectedModel];
     if (!apiKey) {
-        setError(`Please set your ${selectedModel} API key in the settings before regenerating.`);
+        setError("Please set your Gemini API key in the settings before regenerating.");
         setIsSettingsOpen(true);
         throw new Error("API key not set."); // Throw to stop the loading spinner in InstructionDisplay
     }
@@ -412,12 +403,11 @@ const App: React.FC = () => {
       for (let i = stepIndex + 1; i < instructionSteps.length; i++) if (instructionSteps[i].type === 'text') { nextStep = instructionSteps[i].content; break; }
 
       const newContent = await regenerateInstruction(
-        selectedModel,
-        apiKeys,
         associatedImage, 
         language, 
         { previousStep, currentStep: currentStep.content, nextStep }, 
         mode, 
+        apiKey
       );
       
       const newSteps = [...instructionSteps];
@@ -435,9 +425,8 @@ const App: React.FC = () => {
   };
 
   const generateAll = async () => {
-    const apiKey = apiKeys[selectedModel];
     if (!apiKey) {
-      setError(`Please set your ${selectedModel} API key in the settings before generating.`);
+      setError("Please set your Gemini API key in the settings before generating.");
       setIsSettingsOpen(true);
       return;
     }
@@ -449,11 +438,11 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const { title: newTitle, steps } = await generateInstructions(images, language, selectedModel, apiKeys);
+      const { title: newTitle, steps } = await generateInstructions(images, language, apiKey);
       resetDocumentState({ title: newTitle, steps });
     } catch (e) {
       console.error(e);
-      const errorMessage = e instanceof Error ? e.message : `Failed to generate instructions using ${selectedModel}. Please check your API key and try again.`;
+      const errorMessage = e instanceof Error ? e.message : 'Failed to generate instructions. Please check your API key and try again.';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -478,9 +467,8 @@ const App: React.FC = () => {
   };
 
   const handleMergeInstructions = async () => {
-    const apiKey = apiKeys[selectedModel];
     if (!apiKey) {
-      setError(`Please set your ${selectedModel} API key in the settings before merging.`);
+      setError("Please set your Gemini API key in the settings before merging.");
       setIsSettingsOpen(true);
       return;
     }
@@ -519,7 +507,7 @@ const App: React.FC = () => {
             let nextImageIndex = -1;
             for (let i = index + 1; i < images.length; i++) if (existingImageIndices.has(i)) { nextImageIndex = i; break; }
             const context = { previousStep: prevImageIndex !== -1 ? textStepContentMap.get(prevImageIndex) ?? null : null, nextStep: nextImageIndex !== -1 ? textStepContentMap.get(nextImageIndex) ?? null : null };
-            const result = await generateIncrementalInstruction(file, language, selectedModel, apiKeys, context);
+            const result = await generateIncrementalInstruction(file, language, apiKey, context);
             const processedSteps = result.steps.map(step => step.type === 'image' ? { ...step, content: String(index + 1) } : step);
             return { index, steps: processedSteps };
         });
@@ -589,18 +577,7 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
-        theme={theme} 
-        onThemeChange={setTheme} 
-        timeFormat={timeFormat} 
-        onTimeFormatChange={setTimeFormat} 
-        apiKeys={apiKeys} 
-        onApiKeysSave={handleApiKeysSave}
-        selectedModel={selectedModel}
-        onSelectedModelChange={setSelectedModel}
-      />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} timeFormat={timeFormat} onTimeFormatChange={setTimeFormat} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
       <ConfirmModal
         isOpen={isGenerateConfirmOpen}
         message="This will regenerate the entire guide and replace any changes you've made. Are you sure?"
