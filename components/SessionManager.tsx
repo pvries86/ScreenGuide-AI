@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { SavedSession } from '../types';
+import { SavedSession, TimeFormat } from '../types';
 import { PlusIcon, DeleteIcon, LogoIcon, ImportIcon, ExportIcon, SettingsIcon } from './icons';
 
 interface SessionManagerProps {
@@ -12,10 +12,11 @@ interface SessionManagerProps {
   onExport: () => void;
   isExportDisabled: boolean;
   onSettingsClick: () => void;
+  timeFormat: TimeFormat;
 }
 
 export const SessionManager: React.FC<SessionManagerProps> = ({ 
-    sessions, currentSessionId, onNew, onLoad, onDelete, onImport, onExport, isExportDisabled, onSettingsClick 
+    sessions, currentSessionId, onNew, onLoad, onDelete, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
 }) => {
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -26,6 +27,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: timeFormat === '12h',
     }).format(date);
   };
   

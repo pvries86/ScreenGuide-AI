@@ -8,7 +8,7 @@ import { ImageAnnotator } from './components/ImageAnnotator';
 import { ConfirmModal } from './components/ConfirmModal';
 import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
@@ -64,6 +64,7 @@ const App: React.FC = () => {
   // Settings State
   const [apiKey, setApiKey] = useState<string>('');
   const [theme, setTheme] = useState<Theme>('light');
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>('24h');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
@@ -149,12 +150,16 @@ const App: React.FC = () => {
     };
   }, [undo, redo, isSettingsOpen, annotatingImageIndex]);
 
-  // --- Theme & API Key Management ---
+  // --- Settings Management ---
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as Theme | null;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (savedTheme) setTheme(savedTheme);
     else if (prefersDark) setTheme('dark');
+
+    const savedTimeFormat = localStorage.getItem('time-format') as TimeFormat | null;
+    if (savedTimeFormat) setTimeFormat(savedTimeFormat);
+
     const savedApiKey = localStorage.getItem('gemini-api-key');
     if (savedApiKey) {
       setApiKey(savedApiKey);
@@ -169,6 +174,10 @@ const App: React.FC = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
   
+  useEffect(() => {
+    localStorage.setItem('time-format', timeFormat);
+  }, [timeFormat]);
+
   const handleApiKeySave = (newKey: string) => {
     setApiKey(newKey);
     localStorage.setItem('gemini-api-key', newKey);
@@ -538,7 +547,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex w-full min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200">
-      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} />
+      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} timeFormat={timeFormat} />
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto p-4 md:p-8">
             <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
@@ -568,7 +577,7 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} timeFormat={timeFormat} onTimeFormatChange={setTimeFormat} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
       <ConfirmModal
         isOpen={isGenerateConfirmOpen}
         message="This will regenerate the entire guide and replace any changes you've made. Are you sure?"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Theme } from '../types';
+import { Theme, TimeFormat } from '../types';
 import { CloseIcon, SunIcon, MoonIcon, InfoIcon } from './icons';
 
 interface SettingsModalProps {
@@ -7,11 +7,13 @@ interface SettingsModalProps {
   onClose: () => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
+  timeFormat: TimeFormat;
+  onTimeFormatChange: (format: TimeFormat) => void;
   apiKey: string;
   onApiKeySave: (key: string) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, theme, onThemeChange, apiKey, onApiKeySave }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, theme, onThemeChange, timeFormat, onTimeFormatChange, apiKey, onApiKeySave }) => {
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [isInfoVisible, setIsInfoVisible] = useState(false);
@@ -81,6 +83,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, t
                 >
                     <MoonIcon className="w-4 h-4" />
                     Dark
+                </button>
+            </div>
+          </div>
+
+           {/* Time Format Toggle */}
+           <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Time Format
+            </label>
+            <div className="flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                <button
+                    onClick={() => onTimeFormatChange('12h')}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-300 ${
+                        timeFormat === '12h' ? 'bg-white dark:bg-slate-800 text-primary shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
+                >
+                    12-Hour
+                </button>
+                <button
+                    onClick={() => onTimeFormatChange('24h')}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-300 ${
+                        timeFormat === '24h' ? 'bg-white dark:bg-slate-800 text-primary shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
+                >
+                    24-Hour
                 </button>
             </div>
           </div>

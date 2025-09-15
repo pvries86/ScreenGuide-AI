@@ -2,6 +2,8 @@ export type Language = 'en' | 'nl';
 
 export type Theme = 'light' | 'dark';
 
+export type TimeFormat = '12h' | '24h';
+
 export interface InstructionStep {
   type: 'text' | 'image';
   content: string;
