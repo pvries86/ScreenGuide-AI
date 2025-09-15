@@ -4,7 +4,6 @@ import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, Pe
 
 // --- Types ---
 type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop' | 'blur';
-type LineWidth = 2 | 4 | 8;
 type Action = 'none' | 'drawing' | 'moving' | 'resizing' | 'rotating' | 'cropping';
 type HandleKey = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'rotate';
 
@@ -14,7 +13,7 @@ interface Annotation {
   id: number;
   type: Exclude<AnnotationTool, 'eraser' | 'select' | 'crop'>;
   color: string;
-  lineWidth: LineWidth;
+  lineWidth: number;
   start: Point;
   end: Point;
   rotation: number; // in radians
@@ -48,15 +47,6 @@ interface ImageAnnotatorProps {
 }
 
 // --- Constants ---
-const colors = [
-    { name: 'Red', value: '#ef4444' },
-    { name: 'Black', value: '#000000ff' },    
-    { name: 'Blue', value: '#3b82f6' },
-    { name: 'Green', value: '#22c55e' },
-    { name: 'Yellow', value: '#eab308' },
-    { name: 'Purple', value: '#a855f7' },
-];
-
 const HANDLE_SIZE = 8;
 
 // --- Geometry Helper Functions ---
@@ -155,7 +145,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   
   const [tool, setTool] = useState<AnnotationTool>('select');
   const [color, setColor] = useState<string>('#ef4444');
-  const [lineWidth, setLineWidth] = useState<LineWidth>(4);
+  const [lineWidth, setLineWidth] = useState<number>(4);
   const [history, setHistory] = useState<Annotation[]>([]);
   
   const [currentAction, setCurrentAction] = useState<Action>('none');
@@ -734,7 +724,7 @@ const canvasToMain = (p: Point): Point => {
             const scaledAnn = { ...ann,
                 start: { x: ann.start.x * scaleX, y: ann.start.y * scaleY },
                 end: { x: ann.end.x * scaleX, y: ann.end.y * scaleY },
-                lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2) as LineWidth
+                lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2)
             };
             const bounds = getAnnotationBounds(scaledAnn);
             const center = getAnnotationCenter(scaledAnn);
@@ -762,7 +752,7 @@ const canvasToMain = (p: Point): Point => {
                 start: { x: ann.start.x * scaleX, y: ann.start.y * scaleY },
                 end: { x: ann.end.x * scaleX, y: ann.end.y * scaleY },
                 points: ann.points?.map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
-                lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2) as LineWidth
+                lineWidth: (ann.lineWidth * (scaleX + scaleY) / 2)
             };
             const center = getAnnotationCenter(scaledAnn);
             tempCtx.save();
@@ -854,7 +844,6 @@ const canvasToMain = (p: Point): Point => {
     { name: 'select', icon: <SelectIcon /> }, { name: 'crop', icon: <CropIcon/> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
     { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'blur', icon: <BlurIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
   ];
-  const lineSizes: { value: LineWidth, label: string }[] = [{ value: 2, label: 'S' }, { value: 4, label: 'M' }, { value: 8, label: 'L' }];
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm p-4" onClick={onClose} role="dialog" aria-modal="true">
@@ -867,12 +856,52 @@ const canvasToMain = (p: Point): Point => {
                       ))}
                   </div>
                   <div className="h-8 w-px bg-slate-700"></div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-6">
+                    {/* Color Picker */}
                     <div className="flex items-center gap-2">
-                        {colors.map(c => (<button key={c.value} onClick={() => setColor(c.value)} style={{ backgroundColor: c.value }} className={`w-6 h-6 rounded-full ring-offset-2 ring-offset-slate-900 ${color === c.value ? 'ring-2 ring-white' : ''}`} title={c.name} />))}
+                        <label htmlFor="color-picker" className="text-sm font-medium text-slate-300">Color</label>
+                        <div className="relative w-8 h-8 rounded-full border-2 border-slate-600 overflow-hidden cursor-pointer shadow-inner">
+                            <div className="w-full h-full" style={{ backgroundColor: color }}></div>
+                            <input
+                                id="color-picker"
+                                type="color"
+                                value={color}
+                                onChange={(e) => setColor(e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                title="Select annotation color"
+                            />
+                        </div>
                     </div>
-                     <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-md">
-                      {lineSizes.map(size => (<button key={size.value} onClick={() => setLineWidth(size.value)} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${lineWidth === size.value ? 'bg-primary text-white' : 'hover:bg-slate-700'}`} title={`${size.label} size`}>{size.label}</button>))}
+
+                    {/* Line Width Slider */}
+                    <div className="flex items-center gap-3">
+                        <label htmlFor="line-width-slider" className="text-sm font-medium text-slate-300">Thickness</label>
+                        <div 
+                            className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center"
+                            aria-hidden="true"
+                        >
+                            <div 
+                                className="rounded-full transition-all duration-100"
+                                style={{
+                                    backgroundColor: ['text', 'blur', 'eraser'].includes(tool) ? 'transparent' : color,
+                                    width: `${lineWidth}px`,
+                                    height: `${lineWidth}px`,
+                                    maxWidth: '24px',
+                                    maxHeight: '24px',
+                                }}
+                            ></div>
+                        </div>
+                        <input
+                            id="line-width-slider"
+                            type="range"
+                            min="1"
+                            max="30"
+                            step="1"
+                            value={lineWidth}
+                            onChange={(e) => setLineWidth(parseInt(e.target.value, 10))}
+                            className="w-24 cursor-pointer accent-primary"
+                            title="Adjust line thickness"
+                        />
                     </div>
                   </div>
                 </div>
