@@ -4,6 +4,12 @@ export type Theme = 'light' | 'dark';
 
 export type TimeFormat = '12h' | '24h';
 
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'perplexity';
+
+export type ApiKeys = {
+  [key in LLMProvider]?: string;
+};
+
 export interface InstructionStep {
   type: 'text' | 'image';
   content: string;
