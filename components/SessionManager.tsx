@@ -89,35 +89,42 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1">Saved Sessions</h2>
         {sessions.length > 0 ? (
           <ul className="space-y-1">
-            {sessions.map((session) => (
-              <li key={session.id}>
-                <div 
-                  className={`group flex flex-col p-2.5 rounded-lg cursor-pointer transition-colors ${currentSessionId === session.id ? 'bg-indigo-100 dark:bg-primary/20' : 'hover:bg-slate-200 dark:hover:bg-slate-800'}`}
-                  onClick={() => onLoad(session.id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <span className={`font-semibold text-sm break-all ${currentSessionId === session.id ? 'text-primary' : 'text-slate-700 dark:text-slate-200'}`}>
-                      {session.title || 'Untitled Session'}
-                    </span>
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0">
-                       <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to delete "${session.title || 'this session'}"? This action cannot be undone.`)) {
-                              onDelete(session.id);
-                            }
-                          }}
-                          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-md"
-                          title="Delete Session"
-                        >
-                          <DeleteIcon className="w-4 h-4" />
-                        </button>
+            {sessions.map((session) => {
+              const wasModified = session.modifiedAt && (new Date(session.modifiedAt).getTime() > new Date(session.createdAt).getTime() + 5000); // 5s buffer
+              const displayDate = wasModified ? session.modifiedAt! : session.createdAt;
+              return (
+                <li key={session.id}>
+                  <div 
+                    className={`group flex flex-col p-2.5 rounded-lg cursor-pointer transition-colors ${currentSessionId === session.id ? 'bg-indigo-100 dark:bg-primary/20' : 'hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                    onClick={() => onLoad(session.id)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className={`font-semibold text-sm break-all ${currentSessionId === session.id ? 'text-primary' : 'text-slate-700 dark:text-slate-200'}`}>
+                        {session.title || 'Untitled Session'}
+                      </span>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0">
+                        <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Are you sure you want to delete "${session.title || 'this session'}"? This action cannot be undone.`)) {
+                                onDelete(session.id);
+                              }
+                            }}
+                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-md"
+                            title="Delete Session"
+                          >
+                            <DeleteIcon className="w-4 h-4" />
+                          </button>
+                      </div>
                     </div>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        {wasModified && 'Modified '}
+                        {formatDate(displayDate)}
+                    </span>
                   </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">{formatDate(session.createdAt)}</span>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="text-center text-sm text-slate-500 dark:text-slate-400 p-4 mt-4">

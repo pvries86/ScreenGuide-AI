@@ -224,7 +224,7 @@ const App: React.FC = () => {
       if (currentSessionId) {
         const existingSession = sessions.find(s => s.id === currentSessionId);
         if (existingSession) {
-          await db.updateSession({ ...sessionData, id: currentSessionId, createdAt: existingSession.createdAt });
+          await db.updateSession({ ...sessionData, id: currentSessionId, createdAt: existingSession.createdAt, modifiedAt: new Date() });
         }
       } else {
         const newId = await db.addSession(sessionData);

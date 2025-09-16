@@ -38,7 +38,8 @@ export const addSession = async (sessionData: SessionData): Promise<number> => {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.add({ ...sessionData, createdAt: new Date() });
+    const now = new Date();
+    const request = store.add({ ...sessionData, createdAt: now, modifiedAt: now });
 
     request.onsuccess = () => {
       resolve(request.result as number);
@@ -79,8 +80,8 @@ export const getAllSessions = async (): Promise<SavedSession[]> => {
     request.onsuccess = () => {
       // Sort by newest first before returning
       const sortedResult = request.result.sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
+        const dateA = new Date(a.modifiedAt || a.createdAt).getTime();
+        const dateB = new Date(b.modifiedAt || b.createdAt).getTime();
         return dateB - dateA;
       });
       resolve(sortedResult);

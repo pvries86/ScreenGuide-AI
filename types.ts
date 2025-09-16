@@ -29,6 +29,7 @@ export interface SessionData {
 export interface SavedSession extends SessionData {
   id: number;
   createdAt: Date;
+  modifiedAt?: Date;
 }
 
 // Types for JSON export/import
