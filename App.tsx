@@ -275,6 +275,31 @@ const App: React.FC = () => {
       setError(`Failed to delete session ${id}.`);
     }
   };
+  
+  const handleSaveAsSession = async (id: number) => {
+    setError(null);
+    try {
+        const sessionToDuplicate = await db.getSession(id);
+        if (!sessionToDuplicate) {
+            throw new Error("Session to duplicate not found.");
+        }
+
+        const newTitle = window.prompt("Enter a new name for the session:", `Copy of ${sessionToDuplicate.title || 'Untitled Session'}`);
+
+        if (newTitle) {
+            const newSessionData: SessionData = {
+                title: newTitle,
+                steps: sessionToDuplicate.steps,
+                images: sessionToDuplicate.images,
+            };
+            await db.addSession(newSessionData);
+            await loadSessions();
+        }
+    } catch (e) {
+        console.error(e);
+        setError(e instanceof Error ? e.message : `Failed to duplicate session ${id}.`);
+    }
+  };
 
   const handleExportSession = async () => {
     if (!currentSessionId || (instructionSteps.length === 0 && !title)) {
@@ -554,7 +579,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex w-full min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200">
-      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} timeFormat={timeFormat} />
+      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onSaveAs={handleSaveAsSession} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} timeFormat={timeFormat} />
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto p-4 md:p-8">
             <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">

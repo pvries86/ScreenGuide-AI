@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { SavedSession, TimeFormat } from '../types';
-import { PlusIcon, DeleteIcon, LogoIcon, ImportIcon, ExportIcon, SettingsIcon } from './icons';
+import { PlusIcon, DeleteIcon, LogoIcon, ImportIcon, ExportIcon, SettingsIcon, DuplicateIcon } from './icons';
 
 interface SessionManagerProps {
   sessions: SavedSession[];
@@ -8,6 +8,7 @@ interface SessionManagerProps {
   onNew: () => void;
   onLoad: (id: number) => void;
   onDelete: (id: number) => void;
+  onSaveAs: (id: number) => void;
   onImport: (file: File) => void;
   onExport: () => void;
   isExportDisabled: boolean;
@@ -16,7 +17,7 @@ interface SessionManagerProps {
 }
 
 export const SessionManager: React.FC<SessionManagerProps> = ({ 
-    sessions, currentSessionId, onNew, onLoad, onDelete, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
+    sessions, currentSessionId, onNew, onLoad, onDelete, onSaveAs, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
 }) => {
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +103,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                         {session.title || 'Untitled Session'}
                       </span>
                       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0">
+                         <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSaveAs(session.id);
+                            }}
+                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-primary dark:hover:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 rounded-md"
+                            title="Save As / Duplicate"
+                          >
+                            <DuplicateIcon className="w-4 h-4" />
+                          </button>
                         <button
                             onClick={(e) => {
                               e.stopPropagation();
