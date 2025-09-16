@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { SavedSession, TimeFormat } from '../types';
-import { PlusIcon, DeleteIcon, LogoIcon, ImportIcon, ExportIcon, SettingsIcon, DuplicateIcon } from './icons';
+import { PlusIcon, DeleteIcon, LogoIcon, ImportIcon, ExportIcon, SettingsIcon, DuplicateIcon, GithubIcon } from './icons';
 
 interface SessionManagerProps {
   sessions: SavedSession[];
@@ -20,6 +20,28 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     sessions, currentSessionId, onNew, onLoad, onDelete, onSaveAs, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
 }) => {
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [version, setVersion] = useState<string>('...');
+
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const response = await fetch('https://api.github.com/repos/pvries86/ScreenGuide-AI/commits/main');
+        if (!response.ok) {
+          throw new Error(`GitHub API responded with status ${response.status}`);
+        }
+        const commits = await response.json();
+        if (Array.isArray(commits) && commits.length > 0 && commits[0].sha) {
+          setVersion(commits[0].sha.substring(0, 7));
+        } else {
+          throw new Error('Unexpected API response format');
+        }
+      } catch (error) {
+        console.error('Failed to fetch version from GitHub:', error);
+        setVersion('N/A');
+      }
+    };
+    fetchVersion();
+  }, []);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -148,12 +170,23 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           </div>
         )}
       </div>
-       <footer className="flex items-center justify-between p-2 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
-          <div className="flex items-center gap-2 px-2">
-            <span>
-                Powered by Gemini API
-            </span>
+       <footer className="flex items-center justify-between p-2 text-slate-500 dark:text-slate-400 text-xs border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
+          <div className="flex items-center gap-3">
+             <a 
+              href="https://github.com/pvries86/ScreenGuide-AI" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md flex items-center gap-2"
+              aria-label="View source on GitHub"
+              title="View source on GitHub"
+            >
+              <GithubIcon className="w-5 h-5" />
+              <span className="font-mono" title="Latest commit hash">{version}</span>
+            </a>
           </div>
+          <span className="flex-grow text-center">
+              Powered by Gemini API
+          </span>
           <button 
             onClick={onSettingsClick}
             className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md"
