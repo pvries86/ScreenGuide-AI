@@ -301,7 +301,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
     return (
         <div>
             <div className="flex items-center justify-between mb-4 gap-4">
-                <input type="text" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Procedure Title" className="text-2xl font-bold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-700 rounded-md -ml-2 p-2 w-full" aria-label="Procedure Title" />
+                <input type="text" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Procedure Title" className="text-2xl font-bold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-700 rounded-md -ml-2 p-2 w-full border border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" aria-label="Procedure Title" />
                 <div className="flex items-center space-x-2 flex-shrink-0">
                     <button onClick={handleExportDocx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><DocxIcon />DOCX</button>
                     <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><PdfIcon />PDF</button>
