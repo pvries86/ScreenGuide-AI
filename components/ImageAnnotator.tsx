@@ -155,8 +155,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   const canvasToMain = useCallback((p: Point): Point => {
     const canvas = canvasRef.current; const main = mainRef.current; if (!canvas || !main) return p;
     const cRect = canvas.getBoundingClientRect(); const mRect = main.getBoundingClientRect();
-    const scaleX = canvas.width / cRect.width; const scaleY = canvas.height / cRect.height;
-    const cssXOnCanvas = p.x / scaleX; const cssYOnCanvas = p.y / scaleY;
+    const scaleX = cRect.width / canvas.width; const scaleY = cRect.height / canvas.height;
+    const cssXOnCanvas = p.x * scaleX; const cssYOnCanvas = p.y * scaleY;
     return { x: cssXOnCanvas + (cRect.left - mRect.left) + main.scrollLeft, y: cssYOnCanvas + (cRect.top - mRect.top) + main.scrollTop };
   }, []);
 
@@ -278,14 +278,27 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
         const canvas = canvasRef.current; if (!canvas) return;
         const img = new Image();
         img.onload = () => {
-            const ar = img.width / img.height; const p = canvas.parentElement;
+            const ar = img.naturalWidth / img.naturalHeight;
+            const p = canvas.parentElement;
+            
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
             if (p) {
-                const maxW = p.clientWidth; const maxH = p.clientHeight;
-                let newW = maxW; let newH = newW / ar;
-                if (newH > maxH) { newH = maxH; newW = newH * ar; }
-                canvas.width = newW; canvas.height = newH;
-            } else { canvas.width = img.width; canvas.height = img.height; }
-            imageRef.current = img; redrawCanvas();
+                const maxW = p.clientWidth;
+                const maxH = p.clientHeight;
+                let newW = maxW;
+                let newH = newW / ar;
+                if (newH > maxH) {
+                    newH = maxH;
+                    newW = newH * ar;
+                }
+                canvas.style.width = `${newW}px`;
+                canvas.style.height = `${newH}px`;
+            }
+            
+            imageRef.current = img;
+            redrawCanvas();
         };
         img.src = URL.createObjectURL(imageFile);
         return () => { URL.revokeObjectURL(img.src); imageRef.current = null; }
@@ -356,7 +369,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
         return;
     }
     if (tool === 'text') {
-        const base = { x: mousePos.x + 5, y: mousePos.y + 5 }; const screen = canvasToMain(base);
+        const base = { x: mousePos.x, y: mousePos.y }; const screen = canvasToMain(base);
         setTimeout(() => setTextEditing({ x: base.x, y: base.y, sx: screen.x, sy: screen.y, value: '' }), 0); return;
     }
     let clickedOnHandle: Handle | null = null; let clickedAnnotation: Annotation | null = null;
@@ -392,7 +405,25 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const mousePos = getCanvasPoint(e);
-    if (tool === 'crop') { /* ... crop mouse move logic (unchanged) ... */ return; }
+    if (tool === 'crop' && cropRect) {
+        if (currentAction === 'cropping') {
+            const width = mousePos.x - cropRect.x; const height = mousePos.y - cropRect.y;
+            setCropRect({ ...cropRect, width, height });
+        } else if (currentAction === 'moving') {
+            const { mousePos: startMouse, cropRect: startCrop } = actionState.current;
+            const dx = mousePos.x - startMouse.x; const dy = mousePos.y - startMouse.y;
+            setCropRect({ ...startCrop!, x: startCrop!.x + dx, y: startCrop!.y + dy });
+        } else if (currentAction === 'resizing' && activeHandleKey) {
+            let { x, y, width, height } = cropRect;
+            if (activeHandleKey.includes('e')) width = mousePos.x - x;
+            if (activeHandleKey.includes('w')) { width += x - mousePos.x; x = mousePos.x; }
+            if (activeHandleKey.includes('s')) height = mousePos.y - y;
+            if (activeHandleKey.includes('n')) { height += y - mousePos.y; y = mousePos.y; }
+            setCropRect({ x, y, width, height });
+        }
+        redrawCanvas();
+        return;
+    }
     if (currentAction === 'none' || !drawingAnnotation) {
         let newCursor = 'default'; if (tool === 'select') newCursor = 'grab';
         if (['rectangle', 'circle', 'arrow', 'pencil', 'blur', 'number'].includes(tool)) newCursor = 'crosshair';
@@ -415,46 +446,81 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     } else if (currentAction === 'rotating') {
         const { annotation: ann } = actionState.current; const center = getAnnotationCenter(ann!);
         const angle = Math.atan2(mousePos.y - center.y, mousePos.x - center.x) + Math.PI / 2;
-        setDrawingAnnotation({ ...drawingAnnotation, rotation: angle });
+        setDrawingAnnotation({ ...drawingAnnotation!, rotation: angle });
     } else if (currentAction === 'resizing' && activeHandleKey) {
         const { annotation: ann } = actionState.current;
         if (ann!.type === 'number') {
             const center = getAnnotationCenter(ann!); const newRadius = Math.hypot(mousePos.x - center.x, mousePos.y - center.y);
-            setDrawingAnnotation({ ...drawingAnnotation, size: Math.max(8, newRadius) }); return;
+            setDrawingAnnotation({ ...drawingAnnotation!, size: Math.max(8, newRadius) }); return;
         }
-        const handles = getAnnotationHandles(ann!);
         const oppositeHandleKeyMap: Partial<Record<HandleKey, HandleKey>> = { nw: 'se', ne: 'sw', sw: 'ne', se: 'nw', n: 's', s: 'n', w: 'e', e: 'w' };
         const oppositeHandleKey = oppositeHandleKeyMap[activeHandleKey]; if (!oppositeHandleKey) return;
         const pivot = getAnnotationHandles(ann!).find(h => h.key === oppositeHandleKey)!.position;
-        const rotatedMousePos = rotatePoint(mousePos, pivot, -ann!.rotation); const rotatedPivot = rotatePoint(pivot, pivot, -ann!.rotation);
-        const originalBounds = getAnnotationBounds(ann!); const originalWidth = originalBounds.width; const originalHeight = originalBounds.height;
-        const newWidth = Math.abs(rotatedMousePos.x - rotatedPivot.x); const newHeight = Math.abs(rotatedMousePos.y - rotatedPivot.y);
-        const newStartUnrotated = { x: Math.min(rotatedPivot.x, rotatedMousePos.x), y: Math.min(rotatedPivot.y, rotatedMousePos.y) };
-        const newCenterUnrotated = { x: newStartUnrotated.x + newWidth / 2, y: newStartUnrotated.y + newHeight / 2 };
-        const newCenter = rotatePoint(newCenterUnrotated, rotatedPivot, ann!.rotation);
-        const newStart = { x: newCenter.x - newWidth / 2, y: newCenter.y - newHeight / 2 }; const newEnd = { x: newCenter.x + newWidth / 2, y: newCenter.y + newHeight / 2 };
-        let updatedAnn = { ...drawingAnnotation, start: newStart, end: newEnd };
-        if (updatedAnn.type === 'pencil' && updatedAnn.points && ann!.points) {
-            if (originalWidth > 0 && originalHeight > 0) {
-                const scaleX = newWidth / originalWidth; const scaleY = newHeight / originalHeight;
-                updatedAnn.points = ann!.points.map(p => ({
-                    x: newStart.x + (p.x - originalBounds.minX) * scaleX,
-                    y: newStart.y + (p.y - originalBounds.minY) * scaleY
-                }));
-            }
+        const rotatedMousePos = rotatePoint(mousePos, pivot, -ann!.rotation);
+        const newStartUnrotated = { x: Math.min(pivot.x, rotatedMousePos.x), y: Math.min(pivot.y, rotatedMousePos.y) };
+        const newEndUnrotated = { x: Math.max(pivot.x, rotatedMousePos.x), y: Math.max(pivot.y, rotatedMousePos.y) };
+        const newCenterUnrotated = { x: (newStartUnrotated.x + newEndUnrotated.x) / 2, y: (newStartUnrotated.y + newEndUnrotated.y) / 2 };
+        
+        const originalBounds = getAnnotationBounds(ann!);
+        const newWidth = newEndUnrotated.x - newStartUnrotated.x;
+        const newHeight = newEndUnrotated.y - newStartUnrotated.y;
+
+        const rotatedCenterDiff = { x: newCenterUnrotated.x - pivot.x, y: newCenterUnrotated.y - pivot.y };
+        const finalCenter = {
+            x: pivot.x + (rotatedCenterDiff.x * Math.cos(ann!.rotation) - rotatedCenterDiff.y * Math.sin(ann!.rotation)),
+            y: pivot.y + (rotatedCenterDiff.x * Math.sin(ann!.rotation) + rotatedCenterDiff.y * Math.cos(ann!.rotation))
+        };
+        
+        const newStart = { x: finalCenter.x - newWidth / 2, y: finalCenter.y - newHeight / 2 };
+        const newEnd = { x: finalCenter.x + newWidth / 2, y: finalCenter.y + newHeight / 2 };
+        
+        let updatedAnn = { ...drawingAnnotation!, start: newStart, end: newEnd };
+        if (updatedAnn.type === 'pencil' && updatedAnn.points && ann!.points && originalBounds.width > 0 && originalBounds.height > 0) {
+            const scaleX = newWidth / originalBounds.width;
+            const scaleY = newHeight / originalBounds.height;
+            updatedAnn.points = ann!.points.map(p => ({
+                x: newStart.x + (p.x - originalBounds.minX) * scaleX,
+                y: newStart.y + (p.y - originalBounds.minY) * scaleY
+            }));
         }
         setDrawingAnnotation(updatedAnn);
     } else if (currentAction === 'drawing') {
-        let updatedAnn = { ...drawingAnnotation, end: mousePos };
-        if (tool === 'pencil') updatedAnn.points = [...(drawingAnnotation.points || []), mousePos];
+        let updatedAnn = { ...drawingAnnotation!, end: mousePos };
+        if (tool === 'pencil') updatedAnn.points = [...(drawingAnnotation!.points || []), mousePos];
         setDrawingAnnotation(updatedAnn);
     }
-  }, [getCanvasPoint, tool, currentAction, activeHandleKey, history, selectedAnnotationId, drawingAnnotation]);
+  }, [getCanvasPoint, tool, currentAction, activeHandleKey, history, selectedAnnotationId, drawingAnnotation, redrawCanvas]);
   
-  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => { /* ... unchanged ... */ }, [getCanvasPoint, history, canvasToMain]);
+  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+      const mousePos = getCanvasPoint(e);
+      const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
+      let clickedAnnotation: Annotation | null = null;
+      for (let i = history.length - 1; i >= 0; i--) if (isPointInsideAnnotation(mousePos, history[i], ctx)) { clickedAnnotation = history[i]; break; }
+      if (clickedAnnotation && clickedAnnotation.type === 'text') {
+          const screenPos = canvasToMain(clickedAnnotation.start);
+          setTextEditing({
+              x: clickedAnnotation.start.x, y: clickedAnnotation.start.y,
+              sx: screenPos.x, sy: screenPos.y,
+              value: clickedAnnotation.text || '', id: clickedAnnotation.id,
+          });
+          setSelectedAnnotationId(null);
+      }
+  }, [getCanvasPoint, history, canvasToMain]);
 
   const handleMouseUp = useCallback(() => {
-    if (tool === 'crop') { /* ... crop logic ... */ }
+    if (tool === 'crop') {
+        if (currentAction === 'cropping' && cropRect) {
+            const newCropRect = {
+                x: cropRect.width < 0 ? cropRect.x + cropRect.width : cropRect.x,
+                y: cropRect.height < 0 ? cropRect.y + cropRect.height : cropRect.y,
+                width: Math.abs(cropRect.width),
+                height: Math.abs(cropRect.height),
+            };
+            if (newCropRect.width < 10 || newCropRect.height < 10) setCropRect(null); else setCropRect(newCropRect);
+        }
+        setCurrentAction('none'); setActiveHandleKey(null);
+        return;
+    }
     if (drawingAnnotation) {
         if (currentAction === 'drawing') {
             setHistory([...history, drawingAnnotation]);
@@ -466,11 +532,66 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
         setDrawingAnnotation(null);
     }
     setCurrentAction('none'); setActiveHandleKey(null);
-  }, [tool, currentAction, drawingAnnotation, history, setHistory]);
+  }, [tool, currentAction, drawingAnnotation, history, setHistory, cropRect]);
 
-  const handleSaveAnnotations = () => { /* ... unchanged save logic ... */ };
+  const handleSaveAnnotations = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imageFile) return;
+    
+    // Create a temporary canvas to draw the final image without UI elements
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw without any selection UI
+    const image = imageRef.current;
+    if (image) ctx.drawImage(image, 0, 0, tempCanvas.width, tempCanvas.height);
+    
+    history.filter(ann => ann.type === 'blur').forEach(annotation => {
+        if (!annotation.blurStrength || !image) return;
+        ctx.save();
+        const bounds = getAnnotationBounds(annotation);
+        const center = getAnnotationCenter(annotation);
+        ctx.translate(center.x, center.y); ctx.rotate(annotation.rotation); ctx.translate(-center.x, -center.y);
+        ctx.beginPath(); ctx.rect(bounds.minX, bounds.minY, bounds.width, bounds.height); ctx.clip();
+        ctx.filter = `blur(${annotation.blurStrength}px)`;
+        ctx.translate(center.x, center.y); ctx.rotate(-annotation.rotation); ctx.translate(-center.x, -center.y);
+        ctx.drawImage(image, 0, 0, tempCanvas.width, tempCanvas.height);
+        ctx.restore();
+    });
+
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    history.filter(ann => ann.type !== 'blur').forEach(annotation => drawAnnotation(ctx, annotation));
+
+    tempCanvas.toBlob((blob) => {
+        if (blob) {
+            const newFile = new File([blob], imageFile.name, {
+                type: imageFile.type, lastModified: Date.now(),
+            });
+            onSave(newFile);
+        }
+    }, imageFile.type, 0.95);
+  };
   
-  const handleApplyCrop = useCallback(() => { /* ... unchanged crop logic ... */ }, [cropRect, imageFile, onSave]);
+  const handleApplyCrop = useCallback(() => {
+      if (!cropRect || !imageFile || !imageRef.current) return;
+      const image = imageRef.current;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = cropRect.width;
+      tempCanvas.height = cropRect.height;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(image, cropRect.x, cropRect.y, cropRect.width, cropRect.height, 0, 0, cropRect.width, cropRect.height);
+      tempCanvas.toBlob((blob) => {
+          if (blob) {
+              const newFile = new File([blob], `cropped_${imageFile.name}`, { type: imageFile.type, lastModified: Date.now() });
+              onSave(newFile);
+              onClose();
+          }
+      }, imageFile.type, 1.0);
+  }, [cropRect, imageFile, onSave, onClose]);
   const handleCancelCrop = () => { setCropRect(null); setTool('select'); };
 
   if (!isOpen) return null;
@@ -541,8 +662,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                 </div>
             </header>
             <main ref={mainRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
-                <canvas ref={canvasRef} className="max-w-full max-h-full object-contain rounded-md shadow-lg" 
-                    style={{ cursor: canvasCursor, zIndex: 0 }}
+                <canvas ref={canvasRef} className="object-contain rounded-md shadow-lg" 
+                    style={{ cursor: canvasCursor, zIndex: 0, maxWidth: '100%', maxHeight: '100%' }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
@@ -557,7 +678,8 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                         onKeyDown={(e) => { if (e.key === 'Escape') setTextEditing(null); if ((e.key === 'Enter' && (e.metaKey || e.ctrlKey))) commitText(textEditing.value, { x: textEditing.x, y: textEditing.y }); }}
                         style={{
                             position: 'absolute', left: `${textEditing.sx}px`, top: `${textEditing.sy}px`,
-                            fontSize: `${toolOptions.fontSize}px`, lineHeight: 1.2, fontFamily: 'sans-serif',
+                            fontSize: `${(toolOptions.fontSize / (canvasRef.current ? canvasRef.current!.width / canvasRef.current!.getBoundingClientRect().width : 1))}px`, 
+                            lineHeight: 1.2, fontFamily: 'sans-serif',
                             color: color, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: `1px solid ${color}`,
                             outline: 'none', padding: '4px', minWidth: '100px', minHeight: '1.2em',
                             resize: 'none', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.2)',

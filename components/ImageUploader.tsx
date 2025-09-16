@@ -41,17 +41,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
     const imageFiles = newFiles.filter(file => file.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
 
+    // Sort the new files by modification date to establish a chronological initial order.
+    imageFiles.sort((a, b) => a.lastModified - b.lastModified);
+
     const combined = [...images, ...imageFiles];
 
-    // De-duplicate based on name, size, and last modified, keeping the first occurrence
+    // De-duplicate based on name, size, and last modified, keeping the first occurrence.
+    // This preserves existing images and their order if duplicates are added.
     const uniqueFiles = combined.filter((file, index, self) =>
         index === self.findIndex((f) => (
             f.name === file.name && f.size === file.size && f.lastModified === file.lastModified
         ))
     );
-    
-    // Manual sorting is now possible, so we remove automatic sorting.
-    // uniqueFiles.sort((a, b) => a.lastModified - b.lastModified);
     
     onImagesChange(uniqueFiles);
 
