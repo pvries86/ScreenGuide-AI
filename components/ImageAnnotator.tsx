@@ -195,6 +195,49 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   
   const [canvasCursor, setCanvasCursor] = useState('default');
 
+  // A memoized, robust function for converting mouse coordinates to canvas coordinates,
+  // accounting for any scaling between the canvas's display size and its internal resolution.
+  const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement> | MouseEvent): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+
+    // Calculate the scale factor. If the canvas CSS size and its drawing buffer size
+    // are different (e.g., after a window resize), this will be other than 1.
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    // Apply the scale to the mouse coordinates to get the correct point
+    // within the canvas's internal coordinate system.
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+    };
+  }, []);
+
+  // A memoized function to convert a point from the canvas's internal coordinate space
+  // to a CSS pixel position relative to the main container, used for placing the text editor.
+  const canvasToMain = useCallback((p: Point): Point => {
+    const canvas = canvasRef.current;
+    const main = mainRef.current;
+    if (!canvas || !main) return p;
+
+    const cRect = canvas.getBoundingClientRect();
+    const mRect = main.getBoundingClientRect();
+
+    // Reverse the scaling applied in getCanvasPoint to find the CSS pixel offset on the canvas.
+    const scaleX = canvas.width / cRect.width;
+    const scaleY = canvas.height / cRect.height;
+    const cssXOnCanvas = p.x / scaleX;
+    const cssYOnCanvas = p.y / scaleY;
+
+    // Calculate the final position relative to the main container.
+    return {
+        x: cssXOnCanvas + (cRect.left - mRect.left) + main.scrollLeft,
+        y: cssYOnCanvas + (cRect.top - mRect.top) + main.scrollTop,
+    };
+  }, []);
+
   useEffect(() => {
     if (textEditing && textareaRef.current) {
         textareaRef.current.focus();
@@ -209,7 +252,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     };
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [textEditing]);
+  }, [textEditing, canvasToMain]);
 
   const getCropHandles = (rect: { x: number, y: number, width: number, height: number }): Omit<Handle, 'cursor'>[] => {
     const { x, y, width, height } = rect;
@@ -422,24 +465,6 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, selectedAnnotationId, handleDeleteSelected, textEditing]);
 
-  const getCanvasPoint = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent): Point => {
-    const canvas = canvasRef.current; if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-const canvasToMain = (p: Point): Point => {
-  const canvas = canvasRef.current; const main = mainRef.current;
-  if (!canvas || !main) return p;
-  const cRect = canvas.getBoundingClientRect();
-  const mRect = main.getBoundingClientRect();
-  return {
-    x: p.x + (cRect.left - mRect.left) + main.scrollLeft,
-    y: p.y + (cRect.top - mRect.top) + main.scrollTop,
-  };
-};
-
-
   const commitText = (text: string, position: Point) => {
     const val = text.trim();
     const canvas = canvasRef.current; if (!canvas) return;
@@ -471,7 +496,7 @@ const canvasToMain = (p: Point): Point => {
     setTextEditing(null);
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (textEditing) {
         commitText(textEditing.value, { x: textEditing.x, y: textEditing.y });
         return;
@@ -569,9 +594,9 @@ const canvasToMain = (p: Point): Point => {
             setSelectedAnnotationId(null);
         }
     }
-  };
+  }, [getCanvasPoint, textEditing, tool, cropRect, selectedAnnotationId, history, lineWidth, color, canvasToMain]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const mousePos = getCanvasPoint(e);
 
     if (tool === 'crop') {
@@ -726,9 +751,9 @@ const canvasToMain = (p: Point): Point => {
             ctx.beginPath(); ctx.moveTo(newPoints[0].x, newPoints[0].y); newPoints.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
         }
     }
-  };
+  }, [getCanvasPoint, tool, currentAction, startPoint, activeHandleKey, history, selectedAnnotationId, redrawCanvas, color, lineWidth, currentPoints]);
   
-  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const mousePos = getCanvasPoint(e);
     const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
     for (let i = history.length - 1; i >= 0; i--) {
@@ -742,19 +767,19 @@ const canvasToMain = (p: Point): Point => {
             break;
         }
     }
-  };
+  }, [getCanvasPoint, history, canvasToMain]);
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (tool === 'crop' && currentAction === 'resizing' && initialState.current.cropRect) {
         const mousePos = getCanvasPoint(e);
         const { x, y, width, height } = initialState.current.cropRect;
         let newX = x, newY = y, newW = width, newH = height;
         const dx = mousePos.x - initialState.current.mousePos.x;
         const dy = mousePos.y - initialState.current.mousePos.y;
-        if (activeHandleKey.includes('e')) newW += dx;
-        if (activeHandleKey.includes('w')) { newW -= dx; newX += dx; }
-        if (activeHandleKey.includes('s')) newH += dy;
-        if (activeHandleKey.includes('n')) { newH -= dy; newY += dy; }
+        if (activeHandleKey && activeHandleKey.includes('e')) newW += dx;
+        if (activeHandleKey && activeHandleKey.includes('w')) { newW -= dx; newX += dx; }
+        if (activeHandleKey && activeHandleKey.includes('s')) newH += dy;
+        if (activeHandleKey && activeHandleKey.includes('n')) { newH -= dy; newY += dy; }
         setCropRect({ x: newW > 0 ? newX : newX + newW, y: newH > 0 ? newY : newY + newH, width: Math.abs(newW), height: Math.abs(newH) });
     } else if (tool === 'crop' && currentAction === 'cropping' && startPoint) {
          const mousePos = getCanvasPoint(e);
@@ -781,7 +806,7 @@ const canvasToMain = (p: Point): Point => {
     }
     setCurrentAction('none');
     setActiveHandleKey(null);
-  };
+  }, [tool, currentAction, startPoint, getCanvasPoint, activeHandleKey, color, lineWidth, currentPoints, history]);
 
   const handleUndo = () => { setHistory(history.slice(0, -1)); };
   
@@ -1014,7 +1039,7 @@ const canvasToMain = (p: Point): Point => {
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onDoubleClick={handleDoubleClick}
-                    onMouseLeave={() => { if (currentAction !== 'none') handleMouseUp(new MouseEvent('mouseup') as any); }}
+                    onMouseLeave={(e) => { if (currentAction !== 'none') handleMouseUp(e); }}
                 />
                  {textEditing && (
                     <textarea

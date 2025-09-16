@@ -86,8 +86,8 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
       textStepCounter++;
       return new Paragraph({
         children: [
-          new TextRun({ text: `${textStepCounter}. `, size: 24, bold: true }),
-          new TextRun({ text: step.content, size: 24 }),
+          new TextRun({ text: `${textStepCounter}. `, bold: true }),
+          new TextRun({ text: step.content }),
         ],
         spacing: { after: 200 },
       });
@@ -132,6 +132,23 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
   const docChildren = [titleParagraph, ...resolvedChildren.filter((p): p is NonNullable<typeof p> => p !== null)];
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Calibri",
+            size: 24, // 12pt
+          },
+        },
+        heading1: {
+            run: {
+                font: "Calibri",
+                size: 32, // 16pt
+                bold: true,
+            }
+        }
+      },
+    },
     sections: [{
       properties: {},
       children: docChildren,
