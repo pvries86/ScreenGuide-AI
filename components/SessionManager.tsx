@@ -127,10 +127,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       </div>
        <footer className="flex items-center justify-between p-2 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2 px-2">
-            <span className="font-mono">v1.3.0</span>
-            <span className="text-slate-300 dark:text-slate-600">|</span>
             <span>
-                Powered by <a href="https://deepmind.google/technologies/gemini/" target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-600 dark:text-slate-300 hover:underline">Gemini API</a>
+                Powered by Gemini API
             </span>
           </div>
           <button 

@@ -91,6 +91,7 @@ const App: React.FC = () => {
 
   // --- Auto-Save Feature ---
   useEffect(() => {
+    // This effect handles both debounced saving on change and periodic saving.
     const performAutoSave = async () => {
         if (!isModified) return;
         try {
@@ -101,8 +102,14 @@ const App: React.FC = () => {
             console.error("Auto-save failed:", e);
         }
     };
+    
+    // This implements "after every change" using a debounce. It saves 1.5 seconds
+    // after the user has stopped making changes, which is efficient and responsive.
+    const debounceTimer = setTimeout(performAutoSave, 1500);
 
-    const intervalId = setInterval(performAutoSave, 60000); // Auto-save every 60 seconds
+    // This implements the "every 60 seconds" save as a fallback. The timer is
+    // reset on every change, so it acts as a 60-second idle save.
+    const intervalId = setInterval(performAutoSave, 60000);
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
         if (isModified) {
@@ -110,10 +117,10 @@ const App: React.FC = () => {
             event.returnValue = 'You have unsaved changes that may be lost.';
         }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
+        clearTimeout(debounceTimer);
         clearInterval(intervalId);
         window.removeEventListener('beforeunload', handleBeforeUnload);
     };
