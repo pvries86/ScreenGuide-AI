@@ -91,7 +91,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           <ul className="space-y-1">
             {sessions.map((session) => {
               const wasModified = session.modifiedAt && (new Date(session.modifiedAt).getTime() > new Date(session.createdAt).getTime() + 5000); // 5s buffer
-              const displayDate = wasModified ? session.modifiedAt! : session.createdAt;
               return (
                 <li key={session.id}>
                   <div 
@@ -117,10 +116,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                           </button>
                       </div>
                     </div>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        {wasModified && 'Modified '}
-                        {formatDate(displayDate)}
-                    </span>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-col">
+                        <span>
+                            Created: {formatDate(session.createdAt)}
+                        </span>
+                        {wasModified && (
+                          <span>
+                              Modified: {formatDate(session.modifiedAt!)}
+                          </span>
+                        )}
+                    </div>
                   </div>
                 </li>
               );
