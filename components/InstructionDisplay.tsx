@@ -207,9 +207,18 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
     };
     
     const handleExportDocx = () => { exportToDocx(title, steps, images); };
-    const handleDelete = (index: number) => {
-        if (window.confirm('Are you sure you want to delete this step?')) onDeleteStep(index);
+    
+    const handleDeleteBlock = (index: number) => {
+        if (window.confirm('Are you sure you want to delete this step and all its associated images?')) onDeleteStep(index);
     };
+    
+    const handleDeleteImage = useCallback((stepIndex: number) => {
+        if (window.confirm('Are you sure you want to delete this screenshot?')) {
+            const newSteps = [...steps];
+            newSteps.splice(stepIndex, 1);
+            onStepsChange(newSteps);
+        }
+    }, [steps, onStepsChange]);
 
     const handleToggleSelection = (textStepIndex: number) => {
         setSelectedIndices(prev => prev.includes(textStepIndex) ? prev.filter(i => i !== textStepIndex) : [...prev, textStepIndex]);
@@ -333,24 +342,28 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                                                     <div className="text-slate-400 dark:text-slate-500 cursor-grab" title="Drag to reorder"><DragHandleIcon /></div>
                                                 </div>
                                                 <div className="flex-1">
-                                                    <div className="p-2 -m-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer group/step" onClick={() => handleStartEditing(block.textStepIndex)}>
+                                                    <div className="relative p-2 -m-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer" onClick={() => handleStartEditing(block.textStepIndex)}>
                                                         <p className="text-lg leading-relaxed flex">
                                                             <span className="font-bold w-8 flex-shrink-0">{textStepCounter}.</span>
                                                             <span>{block.textStep.content}</span>
                                                         </p>
-                                                        <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1 opacity-0 group-hover/step:opacity-100 focus-within:opacity-100 transition-opacity">
-                                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Delete step"><TrashIcon className="w-4 h-4" /></button>
-                                                            <button className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:text-primary dark:hover:text-indigo-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Edit step"><EditIcon className="w-4 h-4" /></button>
+                                                        <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1 opacity-0 group-hover/block:opacity-100 focus-within:opacity-100 transition-opacity">
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteBlock(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Delete step"><TrashIcon className="w-4 h-4" /></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleStartEditing(block.textStepIndex); }} className="p-1.5 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:text-primary dark:hover:text-indigo-400 rounded-full shadow border border-slate-200 dark:border-slate-600" aria-label="Edit step"><EditIcon className="w-4 h-4" /></button>
                                                         </div>
                                                     </div>
                                                     {block.imageSteps.map((imageStep, imgIdx) => {
                                                         const imageIndex = parseInt(imageStep.content, 10) - 1;
+                                                        const stepIndexInMainArray = block.textStepIndex + 1 + imgIdx;
                                                         if (imageIndex >= 0 && imageIndex < imageUrls.length) {
                                                             return (
                                                                 <div key={`${block.textStepIndex}-${imgIdx}`} className="my-6 relative group/image">
                                                                     <img src={imageUrls[imageIndex]} alt={`Screenshot for step ${textStepCounter}`} className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200 dark:border-slate-700" />
                                                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
                                                                         <button onClick={() => onAnnotateImage(imageIndex)} className="flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform"><AnnotateIcon className="w-5 h-5" />Annotate</button>
+                                                                        <button onClick={() => handleDeleteImage(stepIndexInMainArray)} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-white" aria-label="Delete screenshot">
+                                                                            <TrashIcon className="w-4 h-4" />
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             );
