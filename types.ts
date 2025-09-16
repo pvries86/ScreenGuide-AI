@@ -1,4 +1,4 @@
-export type Language = 'en' | 'nl';
+export type Language = 'en' | 'nl' | 'es' | 'fr' | 'de' | 'li';
 
 export type Theme = 'light' | 'dark';
 

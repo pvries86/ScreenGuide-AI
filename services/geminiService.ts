@@ -38,9 +38,18 @@ const responseSchema = {
   required: ['title', 'steps']
 };
 
+const languageMap: Record<Language, string> = {
+  en: 'English',
+  nl: 'Dutch',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  li: 'Limburgish',
+};
+
 export const generateInstructions = async (images: File[], language: Language, apiKey: string): Promise<SopOutput> => {
   const ai = getAiClient(apiKey);
-  const languageName = language === 'en' ? 'English' : 'Dutch';
+  const languageName = languageMap[language];
 
   const prompt = `You are an expert technical writer specializing in creating clear, concise Standard Operating Procedures (SOPs). Your task is to analyze the following sequence of screenshots and generate a step-by-step guide.
 First, create a short, descriptive title for the overall process shown in the screenshots.
@@ -114,7 +123,7 @@ export const generateIncrementalInstruction = async (
     context: { previousStep: string | null; nextStep: string | null }
 ): Promise<IncrementalSopOutput> => {
     const ai = getAiClient(apiKey);
-    const languageName = language === 'en' ? 'English' : 'Dutch';
+    const languageName = languageMap[language];
     const { previousStep, nextStep } = context;
 
     let prompt = `You are an expert technical writer. Your task is to write a single, clear instruction for the provided screenshot, which is a new step being inserted into an existing guide. The output language must be ${languageName}.
@@ -176,7 +185,7 @@ export const regenerateInstruction = async (
   apiKey: string
 ): Promise<string> => {
   const ai = getAiClient(apiKey);
-  const languageName = language === 'en' ? 'English' : 'Dutch';
+  const languageName = languageMap[language];
   const { previousStep, currentStep, nextStep } = context;
 
   let modificationInstruction = '';
