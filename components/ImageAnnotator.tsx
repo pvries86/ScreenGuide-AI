@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { base64ToFile } from '../utils/fileUtils';
-import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon, CropIcon, BlurIcon } from './icons';
+import { CloseIcon, UndoIcon, RectangleIcon, ArrowIcon, CircleIcon, TextIcon, PencilIcon, EraserIcon, SelectIcon, TrashIcon, RotateIcon, CropIcon, BlurIcon, NumberIcon } from './icons';
 
 // --- Types ---
-type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop' | 'blur';
+type AnnotationTool = 'select' | 'rectangle' | 'arrow' | 'circle' | 'text' | 'pencil' | 'eraser' | 'crop' | 'blur' | 'number';
 type Action = 'none' | 'drawing' | 'moving' | 'resizing' | 'rotating' | 'cropping';
 type HandleKey = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'rotate';
 
@@ -17,7 +17,7 @@ interface Annotation {
   start: Point;
   end: Point;
   rotation: number; // in radians
-  // Text specific
+  // Text or Number specific
   text?: string;
   // Pencil specific
   points?: Point[];
@@ -49,7 +49,21 @@ interface ImageAnnotatorProps {
 // --- Constants ---
 const HANDLE_SIZE = 8;
 
-// --- Geometry Helper Functions ---
+// --- Helper Functions ---
+const getContrastingTextColor = (hexcolor: string): string => {
+    if (hexcolor.startsWith('#')) {
+        hexcolor = hexcolor.slice(1);
+    }
+    if (hexcolor.length === 3) {
+        hexcolor = hexcolor.split('').map(char => char + char).join('');
+    }
+    const r = parseInt(hexcolor.substr(0, 2), 16);
+    const g = parseInt(hexcolor.substr(2, 2), 16);
+    const b = parseInt(hexcolor.substr(4, 2), 16);
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return (yiq >= 128) ? '#000000' : '#FFFFFF';
+};
+
 const rotatePoint = (point: Point, center: Point, angle: number): Point => {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
@@ -59,6 +73,18 @@ const rotatePoint = (point: Point, center: Point, angle: number): Point => {
 };
 
 const getAnnotationBounds = (annotation: Annotation): { minX: number, minY: number, maxX: number, maxY: number, width: number, height: number } => {
+    if (annotation.type === 'number') {
+        const radius = 12 + annotation.lineWidth;
+        const center = annotation.start;
+        return { 
+            minX: center.x - radius, 
+            minY: center.y - radius, 
+            maxX: center.x + radius, 
+            maxY: center.y + radius, 
+            width: radius * 2, 
+            height: radius * 2 
+        };
+    }
     let minX, minY, maxX, maxY;
     if (annotation.type === 'pencil' && annotation.points && annotation.points.length > 0) {
         minX = Math.min(...annotation.points.map(p => p.x));
@@ -75,6 +101,9 @@ const getAnnotationBounds = (annotation: Annotation): { minX: number, minY: numb
 };
 
 const getAnnotationCenter = (annotation: Annotation): Point => {
+    if (annotation.type === 'number') {
+        return annotation.start;
+    }
     const bounds = getAnnotationBounds(annotation);
     return { x: bounds.minX + bounds.width / 2, y: bounds.minY + bounds.height / 2 };
 };
@@ -112,6 +141,11 @@ const isPointInsideAnnotation = (point: Point, annotation: Annotation, ctx: Canv
     const center = getAnnotationCenter(annotation);
     const localPoint = rotatePoint(point, center, -annotation.rotation);
     
+    if (annotation.type === 'number') {
+        const radius = 12 + annotation.lineWidth;
+        return Math.hypot(localPoint.x - center.x, localPoint.y - center.y) <= radius;
+    }
+
     if (annotation.type === 'text' && annotation.text) {
         const fontSize = 12 + annotation.lineWidth * 2;
         const lineHeight = fontSize * 1.2;
@@ -293,6 +327,21 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
             lines.forEach((line, i) => {
                 ctx.fillText(line, annotation.start.x, annotation.start.y + (i * lineHeight));
             });
+        } else if (type === 'number' && text) {
+            const radius = 12 + annotation.lineWidth;
+            const numberCenter = annotation.start;
+            
+            ctx.beginPath();
+            ctx.arc(numberCenter.x, numberCenter.y, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = annotation.color;
+            ctx.fill();
+            
+            const fontSize = 16 + annotation.lineWidth * 0.5;
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.fillStyle = getContrastingTextColor(annotation.color);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, numberCenter.x, numberCenter.y);
         }
         ctx.restore();
     });
@@ -335,6 +384,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
 
     useEffect(() => {
         if (!isOpen || !imageFile) { setHistory([]); setSelectedAnnotationId(null); setCropRect(null); return; }
+        
         const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return;
         const img = new Image();
         img.onload = () => {
@@ -448,6 +498,29 @@ const canvasToMain = (p: Point): Point => {
         return;
     }
 
+    if (tool === 'number') {
+        setHistory(prevHistory => {
+            const existingNumbers = prevHistory
+                .filter(ann => ann.type === 'number' && ann.text)
+                .map(ann => parseInt(ann.text!, 10));
+            const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+            
+            const radius = 12 + lineWidth;
+            const newAnnotation: Annotation = {
+                id: Date.now(),
+                type: 'number',
+                color,
+                lineWidth,
+                rotation: 0,
+                text: String(nextNumber),
+                start: mousePos, // Center point
+                end: { x: mousePos.x + radius, y: mousePos.y + radius }
+            };
+            return [...prevHistory, newAnnotation];
+        });
+        return;
+    }
+
     if (tool === 'text') {
         const base = { x: mousePos.x + 5, y: mousePos.y + 5 };
         const screen = canvasToMain(base);
@@ -539,7 +612,7 @@ const canvasToMain = (p: Point): Point => {
     if (currentAction === 'none') {
         let newCursor = 'default';
         if (tool === 'select') newCursor = 'grab';
-        if (['rectangle', 'circle', 'arrow', 'pencil', 'blur'].includes(tool)) newCursor = 'crosshair';
+        if (['rectangle', 'circle', 'arrow', 'pencil', 'blur', 'number'].includes(tool)) newCursor = 'crosshair';
         if (tool === 'text') newCursor = 'text';
         if (tool === 'eraser') newCursor = 'crosshair';
 
@@ -577,6 +650,13 @@ const canvasToMain = (p: Point): Point => {
         setHistory(history.map(a => a.id === ann.id ? { ...a, rotation: angle } : a));
     } else if (currentAction === 'resizing' && initialState.current.annotation && activeHandleKey) {
         const { annotation: ann } = initialState.current;
+        if (ann.type === 'number') {
+            const center = getAnnotationCenter(ann);
+            const newRadius = Math.hypot(mousePos.x - center.x, mousePos.y - center.y);
+            const newLineWidth = Math.max(1, newRadius - 12);
+            setHistory(history.map(a => a.id === ann.id ? { ...a, lineWidth: newLineWidth } : a));
+            return;
+        }
         const handles = getAnnotationHandles(ann);
         const oppositeHandleKeyMap: Partial<Record<HandleKey, HandleKey>> = { nw: 'se', ne: 'sw', sw: 'ne', se: 'nw', n: 's', s: 'n', w: 'e', e: 'w' };
         const oppositeHandleKey = oppositeHandleKeyMap[activeHandleKey];
@@ -790,6 +870,20 @@ const canvasToMain = (p: Point): Point => {
                 lines.forEach((line, i) => {
                     tempCtx.fillText(line, scaledAnn.start.x, scaledAnn.start.y + (i * lineHeight));
                 });
+            } else if (scaledAnn.type === 'number' && scaledAnn.text) {
+                const radius = (12 * (scaleX + scaleY) / 2) + scaledAnn.lineWidth;
+                const numberCenter = scaledAnn.start;
+                tempCtx.beginPath();
+                tempCtx.arc(numberCenter.x, numberCenter.y, radius, 0, 2 * Math.PI);
+                tempCtx.fillStyle = scaledAnn.color;
+                tempCtx.fill();
+                
+                const fontSize = ((16 + ann.lineWidth * 0.5) * (scaleX + scaleY) / 2);
+                tempCtx.font = `bold ${fontSize}px sans-serif`;
+                tempCtx.fillStyle = getContrastingTextColor(scaledAnn.color);
+                tempCtx.textAlign = 'center';
+                tempCtx.textBaseline = 'middle';
+                tempCtx.fillText(scaledAnn.text, numberCenter.x, numberCenter.y);
             }
             tempCtx.restore();
         });
@@ -842,7 +936,7 @@ const canvasToMain = (p: Point): Point => {
 
   const tools: { name: AnnotationTool; icon: JSX.Element }[] = [
     { name: 'select', icon: <SelectIcon /> }, { name: 'crop', icon: <CropIcon/> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
-    { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'blur', icon: <BlurIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
+    { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'number', icon: <NumberIcon /> }, { name: 'blur', icon: <BlurIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
   ];
 
   return (
