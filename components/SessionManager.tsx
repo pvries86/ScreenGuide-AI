@@ -29,9 +29,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         if (!response.ok) {
           throw new Error(`GitHub API responded with status ${response.status}`);
         }
-        const commits = await response.json();
-        if (Array.isArray(commits) && commits.length > 0 && commits[0].sha) {
-          setVersion(commits[0].sha.substring(0, 7));
+        const commit = await response.json();
+        if (commit && commit.sha) {
+          setVersion(commit.sha.substring(0, 7));
         } else {
           throw new Error('Unexpected API response format');
         }
