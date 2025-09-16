@@ -57,7 +57,7 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
 
 1.  **Upload:** Drag and drop your screenshots into the upload area, paste them from your clipboard (Ctrl+V), or use the file selector.
 2.  **Order:** Drag the screenshot thumbnails to arrange them in the correct sequence. The numbers on the thumbnails indicate the order.
-3.  **Generate:** Select your desired language (English or Dutch) and click the **"Generate"** button.
+3.  **Generate:** Select your desired language (English, Dutch, Spanish, French, German) and click the **"Generate"** button.
 4.  **Refine & Edit:**
     -   Click on any generated text to modify it.
     -   Click the pencil icon on a text step to open the AI regeneration tools.
