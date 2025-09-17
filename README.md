@@ -9,7 +9,7 @@
 ## ✨ Key Features
 
 -   **🤖 AI-Powered Guide Generation:** Automatically creates titles and instructions from your screenshots using the Gemini API (`gemini-2.5-flash`).
--   **🌐 Multi-Language Support:** Generate guides in English or Dutch.
+-   **🌐 Multi-Language Support:** Generate guides in 6 languages: English, Dutch, Spanish, French, German, and Limburgish.
 -   **✍️ Rich Text & Image Editing:**
     -   Click any text step to edit it directly.
     -   Use AI-powered tools to regenerate steps with different tones (shorter, longer, simpler, professional).
@@ -57,7 +57,7 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
 
 1.  **Upload:** Drag and drop your screenshots into the upload area, paste them from your clipboard (Ctrl+V), or use the file selector.
 2.  **Order:** Drag the screenshot thumbnails to arrange them in the correct sequence. The numbers on the thumbnails indicate the order.
-3.  **Generate:** Select your desired language (English or Dutch) and click the **"Generate"** button.
+3.  **Generate:** Select your desired output language from the dropdown and click the **"Generate"** button.
 4.  **Refine & Edit:**
     -   Click on any generated text to modify it.
     -   Click the pencil icon on a text step to open the AI regeneration tools.
