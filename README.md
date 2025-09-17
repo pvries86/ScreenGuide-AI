@@ -1,7 +1,5 @@
 # ScreenGuide AI
 
-![ScreenGuide AI Screenshot](https://raw.githubusercontent.com/pvries86/ScreenGuide-AI/main/screenguide-ai-promo.png)
-
 **ScreenGuide AI** is an intelligent tool that transforms a series of screenshots into clear, step-by-step instructional guides. Powered by the Google Gemini API, it analyzes your images, generates descriptive text for each step, and formats it all into a professional document that you can edit, save, and export as a DOCX or PDF.
 
 ---
