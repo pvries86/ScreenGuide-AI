@@ -143,6 +143,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   const [textEditing, setTextEditing] = useState<TextEditingState | null>(null);
   const [cropRect, setCropRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const actionState = useRef<{ annotation: Annotation | null, mousePos: Point, cropRect: typeof cropRect }>({ annotation: null, mousePos: { x: 0, y: 0 }, cropRect: null });
+  const wasOpenRef = useRef(false);
   const [canvasCursor, setCanvasCursor] = useState('default');
 
   const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement> | MouseEvent): Point => {
@@ -269,12 +270,16 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   }, [history, selectedAnnotationId, tool, cropRect, drawingAnnotation, drawAnnotation]);
 
     useEffect(() => {
-        if (!isOpen || !imageFile) { 
-            resetAnnotationHistory([]); 
-            setSelectedAnnotationId(null); 
-            setCropRect(null); 
-            return; 
+    if (!isOpen || !imageFile) {
+            if (wasOpenRef.current) {
+                resetAnnotationHistory([]);
+                setSelectedAnnotationId(null);
+                setCropRect(null);
+                wasOpenRef.current = false;
+            }
+            return;
         }
+        wasOpenRef.current = true;
         const canvas = canvasRef.current; if (!canvas) return;
         const img = new Image();
         img.onload = () => {
