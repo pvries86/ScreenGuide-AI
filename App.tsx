@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [annotatingImageIndex, setAnnotatingImageIndex] = useState<number | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState<boolean>(false);
   const [isRecoveryPromptOpen, setIsRecoveryPromptOpen] = useState<boolean>(false);
   const [recoveredSession, setRecoveredSession] = useState<ExportedSession | null>(null);
@@ -69,6 +70,8 @@ const App: React.FC = () => {
   // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
   
+  const isElectronEnv = typeof window !== 'undefined' && Boolean(window.electronAPI);
+
   // Derived state for unsaved changes
   const isModified = canUndo;
 
@@ -88,6 +91,12 @@ const App: React.FC = () => {
         localStorage.removeItem('auto-saved-session'); // Clear corrupted data
     }
   }, []);
+
+  useEffect(() => {
+    if (!isElectronEnv && isRecording) {
+      setIsRecording(false);
+    }
+  }, [isElectronEnv, isRecording]);
 
   // --- Auto-Save Feature ---
   useEffect(() => {
@@ -384,6 +393,56 @@ const App: React.FC = () => {
     setError(null);
   };
 
+  const appendImageToQueue = useCallback((file: File) => {
+    if (instructionSteps.length === 0) {
+      resetDocumentState({ title: '', steps: [] });
+    }
+
+    setImages(prev => [...prev, file]);
+    setError(null);
+  }, [instructionSteps.length, resetDocumentState]);
+
+  const toggleRecording = useCallback(() => {
+    setIsRecording(prev => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!isElectronEnv || !isRecording) return;
+
+    let isProcessing = false;
+
+    const handleClick = async (event: MouseEvent) => {
+      if (isProcessing) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-recording-control="true"]')) {
+        return;
+      }
+
+      if (!window.electronAPI) return;
+
+      isProcessing = true;
+      try {
+        const dataUrl = await window.electronAPI.captureScreenshot();
+        if (!dataUrl) return;
+        const timestamp = Date.now();
+        const filename = `screenguide-${new Date(timestamp).toISOString().replace(/[:.]/g, '-')}.png`;
+        const file = base64ToFile(dataUrl, filename, 'image/png', timestamp);
+        appendImageToQueue(file);
+      } catch (error) {
+        console.error('Automatic screenshot capture failed', error);
+        setError(prev => prev ?? 'Failed to automatically capture a screenshot. Please try again.');
+      } finally {
+        isProcessing = false;
+      }
+    };
+
+    window.addEventListener('click', handleClick, true);
+    return () => {
+      window.removeEventListener('click', handleClick, true);
+    };
+  }, [appendImageToQueue, isElectronEnv, isRecording]);
+
   const handleStepsChange = (newSteps: InstructionStep[]) => {
     setDocumentState({ ...documentState, steps: newSteps });
   };
@@ -589,6 +648,24 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-6">
                     <ImageUploader onImagesChange={handleImagesChange} images={images} />
+                    {isElectronEnv && (
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg">
+                            <div>
+                                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Automatic recording</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">When enabled, every click captures this window and adds the screenshot to your queue.</p>
+                            </div>
+                            <button
+                                type="button"
+                                data-recording-control="true"
+                                onClick={toggleRecording}
+                                className={`inline-flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ${isRecording ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500' : 'bg-primary hover:bg-secondary text-white focus:ring-primary'}`}
+                                aria-pressed={isRecording}
+                                title={isRecording ? 'Stop automatically recording clicks' : 'Start automatically recording clicks'}
+                            >
+                                {isRecording ? 'Stop recording' : 'Start recording'}
+                            </button>
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
                         <LanguageToggle language={language} onLanguageChange={setLanguage} />
                         <div className="flex items-center gap-2 w-full sm:w-auto">
