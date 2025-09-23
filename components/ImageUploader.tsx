@@ -4,9 +4,10 @@ import { UploadIcon, CloseIcon, DragHandleIcon } from './icons';
 interface ImageUploaderProps {
   onImagesChange: (files: File[]) => void;
   images: File[];
+  onPreviewImage?: (index: number) => void;
 }
 
-export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, images }) => {
+export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, images, onPreviewImage }) => {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -195,17 +196,30 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesChange, im
                 onDragOver={handleSortDragOver}
                 onDrop={handleSortDrop}
                 onDragEnd={handleSortDragEnd}
+                // Make the thumbnail clickable to open the preview
+                onClick={() => { onPreviewImage?.(index); }}
               >
-                <img src={src} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                <img src={src} alt={`Preview ${index + 1}`} className="w-full h-full object-cover cursor-pointer" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                   <DragHandleIcon className="w-8 h-8 text-white" />
                 </div>
-                 <div className="absolute top-1 left-1 bg-primary text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-lg z-10">
+                <div className="absolute top-1 left-1 bg-primary text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-lg z-10">
                   {index + 1}
                 </div>
+                {onPreviewImage && (
+                  <button
+                    type="button"
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); onPreviewImage(index); }}
+                    className="absolute left-1/2 -translate-x-1/2 bottom-2 px-3 py-1 text-xs font-semibold rounded-md bg-black/70 text-white hover:bg-black/85 opacity-0 group-hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/60 pointer-events-auto z-10"
+                  >
+                    View
+                  </button>
+                )}
+                {/* Annotate button intentionally removed; preview via View button is available */}
                 <button
+                  type="button"
                   onClick={() => handleRemoveImage(index)}
-                  className="absolute top-1 right-1 bg-black/40 text-white rounded-full p-1 hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-white transition-opacity opacity-0 group-hover:opacity-100 z-10"
+                  className="absolute top-1 right-1 bg-black/40 text-white rounded-full p-1 hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-white transition-opacity opacity-0 group-hover:opacity-100 z-10 pointer-events-auto"
                   aria-label={`Remove screenshot ${index + 1}`}
                 >
                   <CloseIcon className="w-4 h-4" />

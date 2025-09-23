@@ -77,6 +77,35 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
     ```bash
     npm run dev
     ```
+
+---
+
+## 🪟 Electron Shell (Windows)
+
+Use the bundled Electron shell when you prefer a native desktop wrapper around the ScreenGuide AI web experience.
+
+### Develop with the Electron shell
+
+The command below starts both the Vite dev server and an Electron window that loads it:
+
+```bash
+npm run electron:dev
+```
+
+### Build a Windows installer
+
+After a production Vite build is generated, Electron Builder packages the app into an `.exe` installer under `release/`:
+
+```bash
+npm run electron:build
+```
+
+> **Note:** Building Windows installers on non-Windows hosts may require [additional system dependencies](https://www.electron.build/multi-platform-build).
+
+### Automatic click recording (Electron only)
+
+When the app runs inside the Electron shell you can toggle **Automatic recording** in the uploader panel. While active, every click inside the window triggers a fresh screenshot that is queued alongside your manually added images, so you can walk through a flow without stopping to capture files yourself.
+
 ---
 
 ## 💻 Tech Stack
@@ -87,3 +116,12 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
 -   **File Exporting:** `jspdf`, `html2canvas`, `docx`, `file-saver`
 
 This project is built as a single-page application with no backend, running entirely in the browser.
+## Native mouse hook (Windows)
+
+If you want automatic recording to pick up clicks outside of the Electron window on Windows, build the helper once:
+
+```bash
+dotnet publish native/MouseHook/MouseHook.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+```
+Captures taken through the helper include a highlight around the cursor.
+

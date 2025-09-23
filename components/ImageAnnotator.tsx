@@ -142,7 +142,9 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   
   const [textEditing, setTextEditing] = useState<TextEditingState | null>(null);
   const [cropRect, setCropRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+  const [zoom, setZoom] = useState<number>(1);
   const actionState = useRef<{ annotation: Annotation | null, mousePos: Point, cropRect: typeof cropRect }>({ annotation: null, mousePos: { x: 0, y: 0 }, cropRect: null });
+  const wasOpenRef = useRef(false);
   const [canvasCursor, setCanvasCursor] = useState('default');
 
   const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement> | MouseEvent): Point => {
@@ -269,12 +271,16 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
   }, [history, selectedAnnotationId, tool, cropRect, drawingAnnotation, drawAnnotation]);
 
     useEffect(() => {
-        if (!isOpen || !imageFile) { 
-            resetAnnotationHistory([]); 
-            setSelectedAnnotationId(null); 
-            setCropRect(null); 
-            return; 
+    if (!isOpen || !imageFile) {
+            if (wasOpenRef.current) {
+                resetAnnotationHistory([]);
+                setSelectedAnnotationId(null);
+                setCropRect(null);
+                wasOpenRef.current = false;
+            }
+            return;
         }
+        wasOpenRef.current = true;
         const canvas = canvasRef.current; if (!canvas) return;
         const img = new Image();
         img.onload = () => {
@@ -596,7 +602,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
 
   if (!isOpen) return null;
 
-  const tools: { name: AnnotationTool; icon: JSX.Element }[] = [
+    const tools: { name: AnnotationTool; icon: React.ReactNode }[] = [
     { name: 'select', icon: <SelectIcon /> }, { name: 'crop', icon: <CropIcon/> }, { name: 'rectangle', icon: <RectangleIcon /> }, { name: 'circle', icon: <CircleIcon /> },
     { name: 'arrow', icon: <ArrowIcon /> }, { name: 'pencil', icon: <PencilIcon /> }, { name: 'text', icon: <TextIcon /> }, { name: 'number', icon: <NumberIcon /> }, { name: 'blur', icon: <BlurIcon /> }, { name: 'eraser', icon: <EraserIcon /> },
   ];
@@ -632,14 +638,14 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm p-4" onClick={onClose} role="dialog" aria-modal="true">
         <div className="bg-slate-800 rounded-lg shadow-2xl w-full h-full flex flex-col" onClick={e => e.stopPropagation()}>
             <header className="flex-shrink-0 bg-slate-900 p-2 flex flex-wrap items-center justify-between gap-4 text-white border-b border-slate-700">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-md">
                       {tools.map(({ name, icon }) => (
                           <button key={name} onClick={() => { setTool(name); setSelectedAnnotationId(null); if (textEditing) commitText(textEditing.value, {x: textEditing.x, y: textEditing.y}); }} className={`p-2 rounded-md transition-colors ${tool === name ? 'bg-primary text-white' : 'hover:bg-slate-700'}`} title={name.charAt(0).toUpperCase() + name.slice(1)}>{icon}</button>
                       ))}
                   </div>
-                  <div className="h-8 w-px bg-slate-700"></div>
-                  <div className="flex items-center gap-4">
+                  <div className="h-8 w-px bg-slate-700 hidden lg:block"></div>
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-slate-300">Color</label>
                         <div className="relative w-8 h-8 rounded-full border-2 border-slate-600 overflow-hidden cursor-pointer shadow-inner">
@@ -649,6 +655,27 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                     </div>
                     <div className="flex items-center gap-3 min-w-[180px]">
                         {renderToolOptions()}
+                    </div>
+                    <div className="flex items-center gap-2 min-w-[220px]">
+                        <label className="text-sm font-medium text-slate-300">Zoom</label>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="3"
+                          step="0.1"
+                          value={zoom}
+                          onChange={(event) => setZoom(parseFloat(event.target.value))}
+                          className="w-32 accent-primary"
+                          aria-label="Canvas zoom"
+                        />
+                        <span className="w-12 text-right text-sm text-slate-300">{Math.round(zoom * 100)}%</span>
+                        <button
+                          type="button"
+                          onClick={() => setZoom(1)}
+                          className="px-2 py-1 text-xs font-semibold rounded-md bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                        >
+                          Reset
+                        </button>
                     </div>
                   </div>
                 </div>
@@ -661,32 +688,40 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ isOpen, onClose,
                     <button onClick={handleSaveAnnotations} className="px-4 py-2 text-sm font-semibold rounded-md bg-primary hover:bg-secondary">Save Changes</button>
                 </div>
             </header>
-            <main ref={mainRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
-                <canvas ref={canvasRef} className="object-contain rounded-md shadow-lg" 
-                    style={{ cursor: canvasCursor, zIndex: 0, maxWidth: '100%', maxHeight: '100%' }}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onDoubleClick={handleDoubleClick}
-                    onMouseLeave={handleMouseUp}
-                />
-                 {textEditing && (
-                    <textarea
-                        ref={textareaRef} value={textEditing.value}
+                        <main ref={mainRef} className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-900/50 relative">
+                                <div className="relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
+                                        <canvas
+                                            ref={canvasRef}
+                                            className="object-contain rounded-md shadow-lg"
+                                            style={{ cursor: canvasCursor, zIndex: 0, maxWidth: '100%', maxHeight: '100%' }}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onDoubleClick={handleDoubleClick}
+                      onMouseLeave={handleMouseUp}
+                    />
+                    {textEditing && (
+                      <textarea
+                        ref={textareaRef}
+                        value={textEditing.value}
                         onChange={(e) => { setTextEditing({ ...textEditing, value: e.target.value }); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }}
                         onBlur={() => commitText(textEditing.value, { x: textEditing.x, y: textEditing.y })}
-                        onKeyDown={(e) => { if (e.key === 'Escape') setTextEditing(null); if ((e.key === 'Enter' && (e.metaKey || e.ctrlKey))) commitText(textEditing.value, { x: textEditing.x, y: textEditing.y }); }}
-                        style={{
-                            position: 'absolute', left: `${textEditing.sx}px`, top: `${textEditing.sy}px`,
-                            fontSize: `${(toolOptions.fontSize / (canvasRef.current ? canvasRef.current!.width / canvasRef.current!.getBoundingClientRect().width : 1))}px`, 
-                            lineHeight: 1.2, fontFamily: 'sans-serif',
-                            color: color, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: `1px solid ${color}`,
-                            outline: 'none', padding: '4px', minWidth: '100px', minHeight: '1.2em',
-                            resize: 'none', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                            borderRadius: '4px', zIndex: 100,
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') setTextEditing(null);
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commitText(textEditing.value, { x: textEditing.x, y: textEditing.y });
                         }}
-                    />
-                )}
+                        style={{
+                          position: 'absolute', left: `${textEditing.sx}px`, top: `${textEditing.sy}px`,
+                          fontSize: `${(toolOptions.fontSize / (canvasRef.current ? canvasRef.current!.width / canvasRef.current!.getBoundingClientRect().width : 1))}px`,
+                          lineHeight: 1.2, fontFamily: 'sans-serif',
+                          color: color, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: `1px solid ${color}`,
+                          outline: 'none', padding: '4px', minWidth: '100px', minHeight: '1.2em',
+                          resize: 'none', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                          borderRadius: '4px', zIndex: 100,
+                        }}
+                      />
+                    )}
+                </div>
                 {tool === 'crop' && cropRect && (
                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-slate-800 p-2 rounded-lg shadow-lg flex items-center gap-2">
                         <button onClick={handleCancelCrop} className="px-4 py-2 text-sm font-semibold text-white rounded-md hover:bg-slate-700">Cancel</button>

@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { SessionManager } from './components/SessionManager';
 import { ImageUploader } from './components/ImageUploader';
 import { InstructionDisplay } from './components/InstructionDisplay';
 import { LanguageToggle } from './components/LanguageToggle';
 import { SettingsModal } from './components/SettingsModal';
 import { ImageAnnotator } from './components/ImageAnnotator';
+import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
@@ -17,6 +18,102 @@ interface DocumentState {
   title: string;
   steps: InstructionStep[];
 }
+
+interface RecordingPointerMeta {
+  relative?: { x: number; y: number };
+  absolute?: { x: number; y: number };
+  display?: { id: number; scaleFactor: number };
+}
+
+type RecordingScreenshotPayload =
+  | string
+  | null
+  | {
+      dataUrl: string | null;
+      pointer?: RecordingPointerMeta;
+      source?: 'native' | 'fallback';
+    };
+
+const POINTER_SVG_PATH = 'M16.5744 19.1999L12.6361 15.2616L11.4334 16.4643C10.2022 17.6955 9.58656 18.3111 8.92489 18.1658C8.26322 18.0204 7.96225 17.2035 7.3603 15.5696L5.3527 10.1205C4.15187 6.86106 3.55146 5.23136 4.39141 4.39141C5.23136 3.55146 6.86106 4.15187 10.1205 5.35271L15.5696 7.3603C17.2035 7.96225 18.0204 8.26322 18.1658 8.92489C18.3111 9.58656 17.6955 10.2022 16.4643 11.4334L15.2616 12.6361L19.1999 16.5744C19.6077 16.9821 19.8116 17.186 19.9058 17.4135C20.0314 17.7168 20.0314 18.0575 19.9058 18.3608C19.8116 18.5882 19.6077 18.7921 19.1999 19.1999C18.7921 19.6077 18.5882 19.8116 18.3608 19.9058C18.0575 20.0314 17.7168 20.0314 17.4135 19.9058C17.186 19.8116 16.9821 19.6077 16.5744 19.1999Z';
+
+const highlightPointerOnImage = (dataUrl: string, pointer: RecordingPointerMeta): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const relative = pointer.relative;
+    if (!relative) {
+      resolve(dataUrl);
+      return;
+    }
+
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+
+        ctx.drawImage(image, 0, 0);
+
+        const x = Math.min(Math.max(relative.x ?? 0, 0), 1) * canvas.width;
+        const y = Math.min(Math.max(relative.y ?? 0, 0), 1) * canvas.height;
+        const radius = Math.max(16, Math.min(canvas.width, canvas.height) * 0.04);
+        const innerRadius = radius * 0.35;
+        const pointerSize = Math.max(24, Math.min(canvas.width, canvas.height) * 0.042);
+        const pointerScale = pointerSize / 24;
+        const POINTER_TIP_OFFSET_X = 4.4;
+        const POINTER_TIP_OFFSET_Y = 4.3;
+
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 230, 0, 0.75)';
+        ctx.lineWidth = Math.max(6, radius * 0.25);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(x, y, innerRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 120, 0, 0.9)';
+        ctx.lineWidth = Math.max(3, innerRadius * 0.6);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(x, y, innerRadius * 0.6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = Math.max(2, innerRadius * 0.35);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(pointerScale, pointerScale);
+        ctx.translate(-POINTER_TIP_OFFSET_X, -POINTER_TIP_OFFSET_Y);
+
+        const pointerPath = new Path2D(POINTER_SVG_PATH);
+        ctx.fillStyle = 'rgba(28, 39, 76, 0.92)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 1.6 / pointerScale;
+        ctx.fill(pointerPath);
+        ctx.stroke(pointerPath);
+        ctx.restore();
+
+        ctx.restore();
+
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+};
 
 const convertFilesToExportedImages = (files: File[]): Promise<ExportedImage[]> => {
     const imagePromises = files.map(async (file) => {
@@ -57,7 +154,11 @@ const App: React.FC = () => {
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [annotatingImageIndex, setAnnotatingImageIndex] = useState<number | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState<boolean>(false);
+  const [nativeRecordingAvailable, setNativeRecordingAvailable] = useState<boolean>(false);
   const [isRecoveryPromptOpen, setIsRecoveryPromptOpen] = useState<boolean>(false);
   const [recoveredSession, setRecoveredSession] = useState<ExportedSession | null>(null);
 
@@ -69,6 +170,8 @@ const App: React.FC = () => {
   // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
   
+  const isElectronEnv = typeof window !== 'undefined' && Boolean(window.electronAPI);
+
   // Derived state for unsaved changes
   const isModified = canUndo;
 
@@ -87,7 +190,13 @@ const App: React.FC = () => {
         console.error("Failed to load auto-saved session:", e);
         localStorage.removeItem('auto-saved-session'); // Clear corrupted data
     }
-  }, []);
+  }, [setError]);
+
+  useEffect(() => {
+    if (!isElectronEnv && isRecording) {
+      setIsRecording(false);
+    }
+  }, [isElectronEnv, isRecording, nativeRecordingAvailable]);
 
   // --- Auto-Save Feature ---
   useEffect(() => {
@@ -173,7 +282,7 @@ const App: React.FC = () => {
     } else {
       setIsSettingsOpen(true);
     }
-  }, []);
+  }, [setError]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -365,6 +474,43 @@ const App: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (previewImageIndex === null) {
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        setPreviewObjectUrl(null);
+      }
+      return;
+    }
+
+    const file = images[previewImageIndex];
+    if (!file) {
+      setPreviewImageIndex(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewObjectUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewImageIndex, images]);
+
+  const handleOpenPreview = useCallback((index: number) => {
+    setPreviewImageIndex(index);
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewImageIndex(null);
+  }, []);
+
+  const handleAnnotateFromPreview = useCallback(() => {
+    if (previewImageIndex !== null) {
+      setAnnotatingImageIndex(previewImageIndex);
+      setPreviewImageIndex(null);
+    }
+  }, [previewImageIndex]);
+
   const handleDiscardAutoSave = () => {
       localStorage.removeItem('auto-saved-session');
       setIsRecoveryPromptOpen(false);
@@ -383,6 +529,143 @@ const App: React.FC = () => {
     setImages(files);
     setError(null);
   };
+
+  const appendImageToQueue = useCallback((file: File) => {
+    if (instructionSteps.length === 0) {
+      resetDocumentState({ title: '', steps: [] });
+    }
+
+    setImages(prev => [...prev, file]);
+    setError(null);
+  }, [instructionSteps.length, resetDocumentState]);
+
+  const appendImageToQueueRef = useRef(appendImageToQueue);
+
+  useEffect(() => {
+    appendImageToQueueRef.current = appendImageToQueue;
+  }, [appendImageToQueue]);
+
+  useEffect(() => {
+    if (!isElectronEnv || !window.electronAPI?.onNativeRecordingState) {
+      return;
+    }
+
+    const dispose = window.electronAPI.onNativeRecordingState(setNativeRecordingAvailable);
+    return () => {
+      dispose?.();
+    };
+  }, [isElectronEnv]);
+
+  const toggleRecording = useCallback(() => {
+    setIsRecording(prev => !prev);
+  }, []);
+
+  const handleScreenshot = useCallback(async (payload: RecordingScreenshotPayload) => {
+    const dataUrl = typeof payload === 'string' || payload === null ? payload : payload?.dataUrl ?? null;
+    if (!dataUrl) return;
+
+    try {
+      const timestamp = Date.now();
+      const filename = `screenguide-${new Date(timestamp).toISOString().replace(/[:.]/g, '-')}.png`;
+      let annotatedDataUrl = dataUrl;
+      const pointerMeta = typeof payload === 'object' && payload !== null && 'pointer' in payload ? payload.pointer : undefined;
+
+      if (pointerMeta?.relative) {
+        try {
+          annotatedDataUrl = await highlightPointerOnImage(dataUrl as string, pointerMeta);
+        } catch (highlightError) {
+          console.warn('Failed to highlight pointer', highlightError);
+        }
+      }
+
+      const file = base64ToFile(annotatedDataUrl as string, filename, 'image/png', timestamp);
+      appendImageToQueueRef.current(file);
+    } catch (error) {
+      console.error('Automatic screenshot capture failed', error);
+      setError(prev => prev ?? 'Failed to automatically capture a screenshot. Please try again.');
+    }
+  }, [setError]);
+
+  useEffect(() => {
+    if (!isElectronEnv || !window.electronAPI) {
+      return;
+    }
+
+    let disposeListener: (() => void) | undefined;
+
+    const toggleGlobalRecording = async (enabled: boolean) => {
+      if (!window.electronAPI?.setRecordingEnabled) {
+        return;
+      }
+
+      try {
+        const success = await window.electronAPI.setRecordingEnabled(enabled);
+        if (!success && enabled) {
+          setNativeRecordingAvailable(false);
+        }
+      } catch (error) {
+        console.error('Failed to toggle automatic recording bridge', error);
+        if (enabled) {
+          setNativeRecordingAvailable(false);
+        }
+      }
+    };
+
+    if (isRecording) {
+      disposeListener = window.electronAPI.onRecordingScreenshot((payload) => {
+        void handleScreenshot(payload);
+      });
+      void toggleGlobalRecording(true);
+    } else {
+      void toggleGlobalRecording(false);
+    }
+
+    return () => {
+      disposeListener?.();
+      void toggleGlobalRecording(false);
+    };
+  }, [handleScreenshot, isElectronEnv, isRecording]);
+
+  useEffect(() => {
+    if (!isElectronEnv || !isRecording || !window.electronAPI?.captureScreenshot) {
+      return;
+    }
+
+    if (nativeRecordingAvailable) {
+      return;
+    }
+
+    let isProcessing = false;
+
+    const handleClick = async (event: MouseEvent) => {
+      if (isProcessing) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-recording-control="true"]')) {
+        return;
+      }
+
+      isProcessing = true;
+      try {
+        const dataUrl = await window.electronAPI.captureScreenshot();
+        if (!dataUrl) return;
+        const timestamp = Date.now();
+        const filename = `screenguide-${new Date(timestamp).toISOString().replace(/[:.]/g, '-')}.png`;
+        const file = base64ToFile(dataUrl, filename, 'image/png', timestamp);
+        appendImageToQueueRef.current(file);
+      } catch (error) {
+        console.error('Automatic screenshot capture failed', error);
+        setError(prev => prev ?? 'Failed to automatically capture a screenshot. Please try again.');
+      } finally {
+        isProcessing = false;
+      }
+    };
+
+    window.addEventListener('click', handleClick, true);
+    return () => {
+      window.removeEventListener('click', handleClick, true);
+    };
+  }, [isElectronEnv, isRecording, nativeRecordingAvailable]);
 
   const handleStepsChange = (newSteps: InstructionStep[]) => {
     setDocumentState({ ...documentState, steps: newSteps });
@@ -588,7 +871,26 @@ const App: React.FC = () => {
                     <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">Turn screenshots into step-by-step guides instantly. Upload, generate, and export.</p>
                 </div>
                 <div className="space-y-6">
-                    <ImageUploader onImagesChange={handleImagesChange} images={images} />
+                    <ImageUploader onImagesChange={handleImagesChange} images={images} onPreviewImage={handleOpenPreview} />
+                    {isElectronEnv && (
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg">
+                            <div>
+                                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Automatic recording</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">When enabled, every click captures this window and adds the screenshot to your queue.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{nativeRecordingAvailable ? 'Capturing clicks from the whole desktop.' : 'Capturing clicks inside ScreenGuide only.'}</p>
+                            </div>
+                            <button
+                                type="button"
+                                data-recording-control="true"
+                                onClick={toggleRecording}
+                                className={`inline-flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ${isRecording ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500' : 'bg-primary hover:bg-secondary text-white focus:ring-primary'}`}
+                                aria-pressed={isRecording}
+                                title={isRecording ? 'Stop automatically recording clicks' : 'Start automatically recording clicks'}
+                            >
+                                {isRecording ? 'Stop recording' : 'Start recording'}
+                            </button>
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
                         <LanguageToggle language={language} onLanguageChange={setLanguage} />
                         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -610,6 +912,13 @@ const App: React.FC = () => {
         </div>
       </main>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} timeFormat={timeFormat} onTimeFormatChange={setTimeFormat} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
+      <ImagePreviewModal
+        isOpen={previewImageIndex !== null && previewObjectUrl !== null}
+        imageUrl={previewObjectUrl}
+        imageName={previewImageIndex !== null ? images[previewImageIndex]?.name : undefined}
+        onClose={handleClosePreview}
+        onAnnotate={previewImageIndex !== null ? handleAnnotateFromPreview : undefined}
+      />
       <ConfirmModal
         isOpen={isGenerateConfirmOpen}
         message="This will regenerate the entire guide and replace any changes you've made. Are you sure?"
@@ -627,3 +936,5 @@ const App: React.FC = () => {
   );
 };
 export default App;
+
+
