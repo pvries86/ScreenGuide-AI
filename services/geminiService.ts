@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { fileToBase64 } from '../utils/fileUtils';
-import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep } from '../types';
+import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep, GeminiModelOption } from '../types';
+
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
 const getAiClient = (apiKey: string): GoogleGenAI => {
     if (!apiKey) {
@@ -47,7 +49,79 @@ const languageMap: Record<Language, string> = {
   li: 'Limburgish',
 };
 
-export const generateInstructions = async (images: File[], language: Language, apiKey: string): Promise<SopOutput> => {
+const normalizeModelId = (name: string): string => name.replace(/^models\//, '');
+
+const getModelLabel = (model: { name?: string; displayName?: string }): string => {
+  if (model.displayName) {
+    return model.displayName;
+  }
+  if (model.name) {
+    return normalizeModelId(model.name);
+  }
+  return DEFAULT_GEMINI_MODEL;
+};
+
+const sortModels = (models: GeminiModelOption[]): GeminiModelOption[] => {
+  return [...models].sort((a, b) => {
+    if (a.id === DEFAULT_GEMINI_MODEL) return -1;
+    if (b.id === DEFAULT_GEMINI_MODEL) return 1;
+    return a.name.localeCompare(b.name);
+  });
+};
+
+const isScreenGuideModel = (id: string): boolean => {
+  const normalizedId = id.toLowerCase();
+  const excludedTerms = [
+    'aqa',
+    'audio',
+    'embedding',
+    'image-generation',
+    'imagen',
+    'learnlm',
+    'live',
+    'native-audio',
+    'tts',
+    'veo',
+  ];
+
+  if (!normalizedId.startsWith('gemini-')) {
+    return false;
+  }
+
+  if (excludedTerms.some((term) => normalizedId.includes(term))) {
+    return false;
+  }
+
+  return /gemini-\d+(?:\.\d+)?-(?:flash|pro)(?:-|$)/.test(normalizedId);
+};
+
+export const listGeminiModels = async (apiKey: string): Promise<GeminiModelOption[]> => {
+  const ai = getAiClient(apiKey);
+  const pager = await ai.models.list();
+  const models: GeminiModelOption[] = [];
+
+  for await (const model of pager) {
+    const supportedActions = model.supportedActions ?? [];
+    if (!model.name || !supportedActions.includes('generateContent')) {
+      continue;
+    }
+
+    const id = normalizeModelId(model.name);
+    if (!isScreenGuideModel(id)) {
+      continue;
+    }
+
+    models.push({
+      id,
+      name: getModelLabel(model),
+      description: model.description,
+    });
+  }
+
+  return sortModels(models);
+};
+
+export const generateInstructions = async (images: File[], language: Language, apiKey: string, model: string = DEFAULT_GEMINI_MODEL): Promise<SopOutput> => {
   const ai = getAiClient(apiKey);
   const languageName = languageMap[language];
 
@@ -70,7 +144,7 @@ You must return the a single JSON object that strictly adheres to the provided s
   );
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model,
     contents: { parts: [{ text: prompt }, ...imageParts] },
     config: {
       responseMimeType: 'application/json',
@@ -120,7 +194,8 @@ export const generateIncrementalInstruction = async (
     image: File,
     language: Language,
     apiKey: string,
-    context: { previousStep: string | null; nextStep: string | null }
+    context: { previousStep: string | null; nextStep: string | null },
+    model: string = DEFAULT_GEMINI_MODEL
 ): Promise<IncrementalSopOutput> => {
     const ai = getAiClient(apiKey);
     const languageName = languageMap[language];
@@ -152,7 +227,7 @@ Your generated instruction must logically connect the previous and next steps in
     };
     
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model,
         contents: { parts: [{ text: prompt }, imagePart] },
         config: {
             responseMimeType: 'application/json',
@@ -182,7 +257,8 @@ export const regenerateInstruction = async (
     nextStep: string | null;
   },
   mode: RegenerationMode = 'regenerate',
-  apiKey: string
+  apiKey: string,
+  model: string = DEFAULT_GEMINI_MODEL
 ): Promise<string> => {
   const ai = getAiClient(apiKey);
   const languageName = languageMap[language];
@@ -244,7 +320,7 @@ export const regenerateInstruction = async (
   }
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model,
     contents: { parts: contentParts },
   });
 

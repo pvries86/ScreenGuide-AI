@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Build outputs
+release_build_v2/
+native/MouseHook/bin/
+native/MouseHook/obj/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

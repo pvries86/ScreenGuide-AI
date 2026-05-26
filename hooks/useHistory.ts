@@ -52,10 +52,20 @@ export const useHistory = <T>(initialState: T) => {
   }, [state]);
 
   const reset = useCallback((newInitialState: T) => {
-    setState({
-      past: [],
-      present: newInitialState,
-      future: [],
+    setState((prev) => {
+      if (
+        deepEqual(prev.present, newInitialState) &&
+        prev.past.length === 0 &&
+        prev.future.length === 0
+      ) {
+        return prev;
+      }
+
+      return {
+        past: [],
+        present: newInitialState,
+        future: [],
+      };
     });
   }, []);
 

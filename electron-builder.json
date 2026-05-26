@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.screenguide.ai",
+  "productName": "ScreenGuide AI",
+  "directories": {
+    "output": "release_build_v2"
+  },
+  "files": [
+    {
+      "from": "dist",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "electron",
+      "to": "electron",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "native",
+      "to": "native",
+      "filter": [
+        "**/*"
+      ]
+    },
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "electron/main.js"
+  },
+  "asar": true,
+  "asarUnpack": [
+    "native/**",
+    "dist/**",
+    "electron/**"
+  ],
+  "extraResources": [
+    {
+      "from": "dist",
+      "to": "dist",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "native",
+      "to": "native",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ]
+  }
+}
+

@@ -16,7 +16,10 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export const base64ToFile = (dataUrl: string, filename: string, mimeType: string, lastModified: number): File => {
-    const arr = dataUrl.split(',');
+  if (typeof dataUrl !== 'string') {
+    throw new Error('base64ToFile expected a data URL string but received ' + typeof dataUrl);
+  }
+  const arr = dataUrl.split(',');
     // The `atob` function decodes a string of data which has been encoded using base-64 encoding.
     const bstr = atob(arr[1]);
     let n = bstr.length;

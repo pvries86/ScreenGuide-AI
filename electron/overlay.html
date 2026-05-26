@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ScreenGuide Overlay</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        user-select: none;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const displayId = params.get('displayId');
+
+      window.addEventListener('pointerdown', event => {
+        window.overlay?.notifyClick({
+          displayId,
+          screenX: event.screenX,
+          screenY: event.screenY,
+          button: event.button
+        });
+      }, true);
+    </script>
+  </body>
+</html>

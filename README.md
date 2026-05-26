@@ -77,6 +77,46 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
     ```bash
     npm run dev
     ```
+
+---
+
+## 🪟 Electron Shell (Windows)
+
+Use the bundled Electron shell when you prefer a native desktop wrapper around the ScreenGuide AI web experience.
+
+### Develop with the Electron shell
+
+The command below starts both the Vite dev server and an Electron window that loads it:
+
+```bash
+npm run electron:dev
+```
+
+### Build a Windows installer
+
+Prerequisites:
+
+-   [Node.js](https://nodejs.org/)
+-   [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+
+On Windows, the .NET SDK can be installed with:
+
+```powershell
+winget install -e --id Microsoft.DotNet.SDK.9
+```
+
+Electron Builder packages the app and its Windows click-capture helper into an `.exe` installer under `release_build_v2/`:
+
+```bash
+npm run electron:build
+```
+
+> **Note:** Building Windows installers on non-Windows hosts may require [additional system dependencies](https://www.electron.build/multi-platform-build).
+
+### Automatic click recording (Electron only)
+
+When the app runs inside the Electron shell you can toggle **Automatic recording** in the uploader panel. While active, clicks are captured as fresh screenshots and queued alongside your manually added images, so you can walk through a flow without stopping to capture files yourself. The Windows build includes the native click hook used for capturing clicks outside the ScreenGuide window.
+
 ---
 
 ## 💻 Tech Stack
@@ -87,3 +127,4 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
 -   **File Exporting:** `jspdf`, `html2canvas`, `docx`, `file-saver`
 
 This project is built as a single-page application with no backend, running entirely in the browser.
+
