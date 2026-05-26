@@ -94,7 +94,7 @@ npm run electron:dev
 
 ### Build a Windows installer
 
-After a production Vite build is generated, Electron Builder packages the app into an `.exe` installer under `release/`:
+Electron Builder packages the app and its Windows click-capture helper into an `.exe` installer under `release_build_v2/`:
 
 ```bash
 npm run electron:build
@@ -104,7 +104,7 @@ npm run electron:build
 
 ### Automatic click recording (Electron only)
 
-When the app runs inside the Electron shell you can toggle **Automatic recording** in the uploader panel. While active, every click inside the window triggers a fresh screenshot that is queued alongside your manually added images, so you can walk through a flow without stopping to capture files yourself.
+When the app runs inside the Electron shell you can toggle **Automatic recording** in the uploader panel. While active, clicks are captured as fresh screenshots and queued alongside your manually added images, so you can walk through a flow without stopping to capture files yourself. The Windows build includes the native click hook used for capturing clicks outside the ScreenGuide window.
 
 ---
 
@@ -116,12 +116,4 @@ When the app runs inside the Electron shell you can toggle **Automatic recording
 -   **File Exporting:** `jspdf`, `html2canvas`, `docx`, `file-saver`
 
 This project is built as a single-page application with no backend, running entirely in the browser.
-## Native mouse hook (Windows)
-
-If you want automatic recording to pick up clicks outside of the Electron window on Windows, build the helper once:
-
-```bash
-dotnet publish native/MouseHook/MouseHook.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
-```
-Captures taken through the helper include a highlight around the cursor.
 
