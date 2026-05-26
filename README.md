@@ -94,6 +94,17 @@ npm run electron:dev
 
 ### Build a Windows installer
 
+Prerequisites:
+
+-   [Node.js](https://nodejs.org/)
+-   [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+
+On Windows, the .NET SDK can be installed with:
+
+```powershell
+winget install -e --id Microsoft.DotNet.SDK.9
+```
+
 Electron Builder packages the app and its Windows click-capture helper into an `.exe` installer under `release_build_v2/`:
 
 ```bash
