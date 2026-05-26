@@ -7,9 +7,9 @@ import { SettingsModal } from './components/SettingsModal';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { generateInstructions, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
+import { DEFAULT_GEMINI_MODEL, generateInstructions, listGeminiModels, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, GeminiModelOption } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
@@ -164,6 +164,10 @@ const App: React.FC = () => {
 
   // Settings State
   const [apiKey, setApiKey] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_GEMINI_MODEL);
+  const [availableModels, setAvailableModels] = useState<GeminiModelOption[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>('light');
   const [timeFormat, setTimeFormat] = useState<TimeFormat>('24h');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -282,6 +286,11 @@ const App: React.FC = () => {
     } else {
       setIsSettingsOpen(true);
     }
+
+    const savedModel = localStorage.getItem('gemini-model');
+    if (savedModel) {
+      setSelectedModel(savedModel);
+    }
   }, [setError]);
 
   useEffect(() => {
@@ -298,6 +307,42 @@ const App: React.FC = () => {
     setApiKey(newKey);
     localStorage.setItem('gemini-api-key', newKey);
   };
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    localStorage.setItem('gemini-model', model);
+  };
+
+  const refreshModels = useCallback(async () => {
+    if (!apiKey) {
+      setAvailableModels([]);
+      setModelLoadError(null);
+      return;
+    }
+
+    setIsLoadingModels(true);
+    setModelLoadError(null);
+    try {
+      const models = await listGeminiModels(apiKey);
+      setAvailableModels(models);
+
+      if (models.length > 0 && !models.some((model) => model.id === selectedModel)) {
+        const preferredModel = models.find((model) => model.id === DEFAULT_GEMINI_MODEL) ?? models[0];
+        handleModelChange(preferredModel.id);
+      }
+    } catch (e) {
+      console.error(e);
+      setModelLoadError(e instanceof Error ? e.message : 'Could not load Gemini models.');
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, [apiKey, selectedModel]);
+
+  useEffect(() => {
+    if (isSettingsOpen && apiKey) {
+      void refreshModels();
+    }
+  }, [apiKey, isSettingsOpen, refreshModels]);
 
   // --- Session Management Callbacks ---
 
@@ -718,11 +763,12 @@ const App: React.FC = () => {
       for (let i = stepIndex + 1; i < instructionSteps.length; i++) if (instructionSteps[i].type === 'text') { nextStep = instructionSteps[i].content; break; }
 
       const newContent = await regenerateInstruction(
-        associatedImage, 
-        language, 
-        { previousStep, currentStep: currentStep.content, nextStep }, 
-        mode, 
-        apiKey
+        associatedImage,
+        language,
+        { previousStep, currentStep: currentStep.content, nextStep },
+        mode,
+        apiKey,
+        selectedModel
       );
       
       const newSteps = [...instructionSteps];
@@ -753,7 +799,7 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const { title: newTitle, steps } = await generateInstructions(images, language, apiKey);
+      const { title: newTitle, steps } = await generateInstructions(images, language, apiKey, selectedModel);
       resetDocumentState({ title: newTitle, steps });
     } catch (e) {
       console.error(e);
@@ -822,7 +868,7 @@ const App: React.FC = () => {
             let nextImageIndex = -1;
             for (let i = index + 1; i < images.length; i++) if (existingImageIndices.has(i)) { nextImageIndex = i; break; }
             const context = { previousStep: prevImageIndex !== -1 ? textStepContentMap.get(prevImageIndex) ?? null : null, nextStep: nextImageIndex !== -1 ? textStepContentMap.get(nextImageIndex) ?? null : null };
-            const result = await generateIncrementalInstruction(file, language, apiKey, context);
+            const result = await generateIncrementalInstruction(file, language, apiKey, context, selectedModel);
             const processedSteps = result.steps.map(step => step.type === 'image' ? { ...step, content: String(index + 1) } : step);
             return { index, steps: processedSteps };
         });
@@ -911,7 +957,22 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} theme={theme} onThemeChange={setTheme} timeFormat={timeFormat} onTimeFormatChange={setTimeFormat} apiKey={apiKey} onApiKeySave={handleApiKeySave} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        theme={theme}
+        onThemeChange={setTheme}
+        timeFormat={timeFormat}
+        onTimeFormatChange={setTimeFormat}
+        apiKey={apiKey}
+        onApiKeySave={handleApiKeySave}
+        selectedModel={selectedModel}
+        availableModels={availableModels}
+        isLoadingModels={isLoadingModels}
+        modelLoadError={modelLoadError}
+        onModelChange={handleModelChange}
+        onRefreshModels={refreshModels}
+      />
       <ImagePreviewModal
         isOpen={previewImageIndex !== null && previewObjectUrl !== null}
         imageUrl={previewObjectUrl}

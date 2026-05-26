@@ -4,6 +4,12 @@ export type Theme = 'light' | 'dark';
 
 export type TimeFormat = '12h' | '24h';
 
+export interface GeminiModelOption {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface InstructionStep {
   type: 'text' | 'image';
   content: string;

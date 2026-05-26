@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Theme, TimeFormat } from '../types';
+import { GeminiModelOption, Theme, TimeFormat } from '../types';
 import { CloseIcon, SunIcon, MoonIcon, InfoIcon } from './icons';
 
 interface SettingsModalProps {
@@ -11,9 +11,30 @@ interface SettingsModalProps {
   onTimeFormatChange: (format: TimeFormat) => void;
   apiKey: string;
   onApiKeySave: (key: string) => void;
+  selectedModel: string;
+  availableModels: GeminiModelOption[];
+  isLoadingModels: boolean;
+  modelLoadError: string | null;
+  onModelChange: (model: string) => void;
+  onRefreshModels: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, theme, onThemeChange, timeFormat, onTimeFormatChange, apiKey, onApiKeySave }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  theme,
+  onThemeChange,
+  timeFormat,
+  onTimeFormatChange,
+  apiKey,
+  onApiKeySave,
+  selectedModel,
+  availableModels,
+  isLoadingModels,
+  modelLoadError,
+  onModelChange,
+  onRefreshModels,
+}) => {
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [isInfoVisible, setIsInfoVisible] = useState(false);
@@ -152,6 +173,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, t
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
               Your API key is stored securely in your browser's local storage.
             </p>
+          </div>
+
+          {/* Gemini Model Selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="gemini-model" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Gemini Model
+              </label>
+              <button
+                onClick={onRefreshModels}
+                disabled={!apiKey || isLoadingModels}
+                className="text-sm font-medium text-primary hover:text-secondary disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
+                {isLoadingModels ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+            <select
+              id="gemini-model"
+              value={selectedModel}
+              onChange={(e) => onModelChange(e.target.value)}
+              disabled={!apiKey || isLoadingModels}
+              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-700 disabled:cursor-not-allowed"
+            >
+              {availableModels.some((model) => model.id === selectedModel) ? null : (
+                <option value={selectedModel}>{selectedModel}</option>
+              )}
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              Models are loaded from your Gemini API key and filtered to Gemini Flash and Pro models suitable for screenshot-based guide generation.
+            </p>
+            {modelLoadError && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">{modelLoadError}</p>
+            )}
           </div>
         </div>
 
