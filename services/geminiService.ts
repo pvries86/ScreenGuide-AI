@@ -1,35 +1,34 @@
-import { GoogleGenAI, Type } from '@google/genai';
 import { fileToBase64 } from '../utils/fileUtils';
 import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep, GeminiModelOption } from '../types';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-const getAiClient = (apiKey: string): GoogleGenAI => {
+const assertApiKey = (apiKey: string): void => {
     if (!apiKey) {
       throw new Error("API key is not configured. Please set it in the settings menu.");
     }
-    return new GoogleGenAI({ apiKey });
 };
 
 const responseSchema = {
-  type: Type.OBJECT,
+  type: 'OBJECT',
   properties: {
     title: {
-      type: Type.STRING,
+      type: 'STRING',
       description: "A concise and descriptive title for the Standard Operating Procedure based on the provided screenshots. Example: 'How to Create a New Email Filter in Gmail'."
     },
     steps: {
-      type: Type.ARRAY,
+      type: 'ARRAY',
       items: {
-        type: Type.OBJECT,
+        type: 'OBJECT',
         properties: {
           type: {
-            type: Type.STRING,
+            type: 'STRING',
             enum: ['text', 'image'],
             description: "The type of content: either a text instruction or an image placeholder."
           },
           content: {
-            type: Type.STRING,
+            type: 'STRING',
             description: "If type is 'text', this is the instruction. If type is 'image', this is the 1-based index of the screenshot."
           }
         },
@@ -51,7 +50,98 @@ const languageMap: Record<Language, string> = {
 
 const normalizeModelId = (name: string): string => name.replace(/^models\//, '');
 
-const getModelLabel = (model: { name?: string; displayName?: string }): string => {
+type GeminiModel = {
+  name?: string;
+  displayName?: string;
+  description?: string;
+  supportedActions?: string[];
+  supportedGenerationMethods?: string[];
+};
+
+type ListModelsResponse = {
+  models?: GeminiModel[];
+  nextPageToken?: string;
+};
+
+type GeminiPart = {
+  text: string;
+} | {
+  inlineData: {
+    data: string;
+    mimeType: string;
+  };
+};
+
+type GenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+    finishReason?: string;
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
+const buildGeminiUrl = (path: string): string => `${GEMINI_API_BASE}${path}`;
+
+const requestGemini = async <T>(path: string, apiKey: string, init: RequestInit = {}): Promise<T> => {
+  assertApiKey(apiKey);
+
+  const response = await fetch(buildGeminiUrl(path), {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+      ...init.headers,
+    },
+  });
+
+  const responseBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = responseBody?.error?.message ?? response.statusText;
+    throw new Error(`Gemini API request failed: ${message}`);
+  }
+
+  return responseBody as T;
+};
+
+const generateGeminiContent = async (
+  model: string,
+  apiKey: string,
+  parts: GeminiPart[],
+  generationConfig?: Record<string, unknown>
+): Promise<string> => {
+  const modelId = normalizeModelId(model);
+  const response = await requestGemini<GenerateContentResponse>(
+    `/models/${encodeURIComponent(modelId)}:generateContent`,
+    apiKey,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        contents: [{ parts }],
+        ...(generationConfig ? { generationConfig } : {}),
+      }),
+    }
+  );
+
+  const responseText = response.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text ?? '')
+    .join('')
+    .trim();
+
+  if (!responseText) {
+    const finishReason = response.candidates?.[0]?.finishReason;
+    throw new Error(finishReason ? `Gemini returned no text. Finish reason: ${finishReason}.` : 'Gemini returned no text.');
+  }
+
+  return responseText;
+};
+
+const getModelLabel = (model: GeminiModel): string => {
   if (model.displayName) {
     return model.displayName;
   }
@@ -96,33 +186,42 @@ const isScreenGuideModel = (id: string): boolean => {
 };
 
 export const listGeminiModels = async (apiKey: string): Promise<GeminiModelOption[]> => {
-  const ai = getAiClient(apiKey);
-  const pager = await ai.models.list();
   const models: GeminiModelOption[] = [];
+  let pageToken: string | undefined;
 
-  for await (const model of pager) {
-    const supportedActions = model.supportedActions ?? [];
-    if (!model.name || !supportedActions.includes('generateContent')) {
-      continue;
+  do {
+    const params = new URLSearchParams({ pageSize: '1000' });
+    if (pageToken) {
+      params.set('pageToken', pageToken);
     }
 
-    const id = normalizeModelId(model.name);
-    if (!isScreenGuideModel(id)) {
-      continue;
+    const response = await requestGemini<ListModelsResponse>(`/models?${params.toString()}`, apiKey);
+
+    for (const model of response.models ?? []) {
+      const supportedActions = model.supportedGenerationMethods ?? model.supportedActions ?? [];
+      if (!model.name || !supportedActions.includes('generateContent')) {
+        continue;
+      }
+
+      const id = normalizeModelId(model.name);
+      if (!isScreenGuideModel(id)) {
+        continue;
+      }
+
+      models.push({
+        id,
+        name: getModelLabel(model),
+        description: model.description,
+      });
     }
 
-    models.push({
-      id,
-      name: getModelLabel(model),
-      description: model.description,
-    });
-  }
+    pageToken = response.nextPageToken;
+  } while (pageToken);
 
   return sortModels(models);
 };
 
 export const generateInstructions = async (images: File[], language: Language, apiKey: string, model: string = DEFAULT_GEMINI_MODEL): Promise<SopOutput> => {
-  const ai = getAiClient(apiKey);
   const languageName = languageMap[language];
 
   const prompt = `You are an expert technical writer specializing in creating clear, concise Standard Operating Procedures (SOPs). Your task is to analyze the following sequence of screenshots and generate a step-by-step guide.
@@ -143,16 +242,16 @@ You must return the a single JSON object that strictly adheres to the provided s
     })
   );
 
-  const response = await ai.models.generateContent({
+  const responseText = await generateGeminiContent(
     model,
-    contents: { parts: [{ text: prompt }, ...imageParts] },
-    config: {
+    apiKey,
+    [{ text: prompt }, ...imageParts],
+    {
       responseMimeType: 'application/json',
       responseSchema: responseSchema,
-    },
-  });
+    }
+  );
 
-  const responseText = response.text.trim();
   try {
     const parsedJson = JSON.parse(responseText);
     // Basic validation to ensure it's an array of instruction steps
@@ -167,19 +266,19 @@ You must return the a single JSON object that strictly adheres to the provided s
 };
 
 const incrementalResponseSchema = {
-    type: Type.OBJECT,
+    type: 'OBJECT',
     properties: {
         steps: {
-            type: Type.ARRAY,
+            type: 'ARRAY',
             items: {
-                type: Type.OBJECT,
+                type: 'OBJECT',
                 properties: {
                     type: {
-                        type: Type.STRING,
+                        type: 'STRING',
                         enum: ['text', 'image'],
                     },
                     content: {
-                        type: Type.STRING,
+                        type: 'STRING',
                         description: "If type is 'text', this is the instruction. If type is 'image', this is the 1-based index of the screenshot (use the placeholder 'INSERT_IMAGE_HERE' as the index will be calculated later)."
                     }
                 },
@@ -197,7 +296,6 @@ export const generateIncrementalInstruction = async (
     context: { previousStep: string | null; nextStep: string | null },
     model: string = DEFAULT_GEMINI_MODEL
 ): Promise<IncrementalSopOutput> => {
-    const ai = getAiClient(apiKey);
     const languageName = languageMap[language];
     const { previousStep, nextStep } = context;
 
@@ -226,16 +324,16 @@ Your generated instruction must logically connect the previous and next steps in
         },
     };
     
-    const response = await ai.models.generateContent({
+    const responseText = await generateGeminiContent(
         model,
-        contents: { parts: [{ text: prompt }, imagePart] },
-        config: {
+        apiKey,
+        [{ text: prompt }, imagePart],
+        {
             responseMimeType: 'application/json',
             responseSchema: incrementalResponseSchema,
-        },
-    });
+        }
+    );
 
-    const responseText = response.text.trim();
     try {
         const parsedJson = JSON.parse(responseText);
         if (parsedJson && Array.isArray(parsedJson.steps)) {
@@ -260,7 +358,6 @@ export const regenerateInstruction = async (
   apiKey: string,
   model: string = DEFAULT_GEMINI_MODEL
 ): Promise<string> => {
-  const ai = getAiClient(apiKey);
   const languageName = languageMap[language];
   const { previousStep, currentStep, nextStep } = context;
 
@@ -319,10 +416,9 @@ export const regenerateInstruction = async (
     contentParts.push(imagePart);
   }
 
-  const response = await ai.models.generateContent({
+  return generateGeminiContent(
     model,
-    contents: { parts: contentParts },
-  });
-
-  return response.text.trim();
+    apiKey,
+    contentParts
+  );
 };

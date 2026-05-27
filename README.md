@@ -124,7 +124,7 @@ When the app runs inside the Electron shell you can toggle **Automatic recording
 ## 💻 Tech Stack
 
 -   **Frontend:** React, TypeScript, Tailwind CSS
--   **AI Model:** Google Gemini API (`gemini-2.5-flash`) via `@google/genai` SDK
+-   **AI Model:** Google Gemini API (`gemini-2.5-flash`) via native REST calls
 -   **Local Storage:** IndexedDB for robust client-side session storage.
 -   **File Exporting:** `jspdf`, `html2canvas`, `docx`, `file-saver`
 
