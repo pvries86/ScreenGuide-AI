@@ -2,6 +2,8 @@
 
 **ScreenGuide AI** is an intelligent tool that transforms a series of screenshots into clear, step-by-step instructional guides. Powered by the Google Gemini API, it analyzes your images, generates descriptive text for each step, and formats it all into a professional document that you can edit, save, and export as a DOCX or PDF.
 
+> This project was built iteratively with AI-assisted development. Review and test changes carefully before using it in production workflows.
+
 ---
 
 ## ✨ Key Features
@@ -127,4 +129,3 @@ When the app runs inside the Electron shell you can toggle **Automatic recording
 -   **File Exporting:** `jspdf`, `html2canvas`, `docx`, `file-saver`
 
 This project is built as a single-page application with no backend, running entirely in the browser.
-
