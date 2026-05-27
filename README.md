@@ -67,7 +67,7 @@ That's it! Your key is saved locally in your browser's storage, and you can now 
 
 ## 🏃 Run Locally
 
-**Prerequisites:** [Node.js](https://nodejs.org/)
+**Prerequisites:** [Node.js 22.12 or newer](https://nodejs.org/)
 
 1.  **Install dependencies:**
     ```bash
@@ -96,7 +96,7 @@ npm run electron:dev
 
 Prerequisites:
 
--   [Node.js](https://nodejs.org/)
+-   [Node.js 22.12 or newer](https://nodejs.org/)
 -   [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 
 On Windows, the .NET SDK can be installed with:
