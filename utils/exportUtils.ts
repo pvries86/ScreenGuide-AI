@@ -55,13 +55,71 @@ export const exportToPdf = async (element: HTMLElement, filename: string) => {
   pdf.save(`${filename}.pdf`);
 };
 
-const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+const loadImage = (file: File): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(imageUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      reject(new Error(`Could not load image: ${file.name}`));
+    };
+    img.src = imageUrl;
+  });
+};
+
+const blobToArrayBuffer = (blob: Blob): Promise<ArrayBuffer> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as ArrayBuffer);
     reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(blob);
   });
+};
+
+const compressImageForDocx = async (
+  file: File,
+  maxWidth = 1200,
+  quality = 0.82
+): Promise<{ data: ArrayBuffer; width: number; height: number }> => {
+  const img = await loadImage(file);
+  const scale = Math.min(1, maxWidth / img.width);
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Could not create image canvas for DOCX export.');
+  }
+
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const compressedBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error(`Could not compress image: ${file.name}`));
+        }
+      },
+      'image/jpeg',
+      quality
+    );
+  });
+
+  return {
+    data: await blobToArrayBuffer(compressedBlob),
+    width,
+    height,
+  };
 };
 
 export const exportToDocx = async (title: string, steps: InstructionStep[], images: File[]) => {
@@ -96,24 +154,15 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
       if (imageIndex >= 0 && imageIndex < images.length) {
         try {
           const imageFile = images[imageIndex];
-          const imageBuffer = await readFileAsArrayBuffer(imageFile);
-
-          const tempImage = await new Promise<HTMLImageElement>((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = URL.createObjectURL(imageFile);
-          });
-          URL.revokeObjectURL(tempImage.src);
-
-          const aspectRatio = tempImage.width / tempImage.height;
+          const exportImage = await compressImageForDocx(imageFile);
+          const aspectRatio = exportImage.width / exportImage.height;
           const width = 500;
           const height = width / aspectRatio;
 
           return new Paragraph({
             children: [
               new ImageRun({
-                data: imageBuffer,
+                data: exportImage.data,
                 transformation: { width, height },
               }),
             ],
