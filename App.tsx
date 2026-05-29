@@ -202,6 +202,8 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<Theme>('light');
   const [timeFormat, setTimeFormat] = useState<TimeFormat>('24h');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isApiKeyLoaded, setIsApiKeyLoaded] = useState<boolean>(false);
+  const [isSecureApiStorageAvailable, setIsSecureApiStorageAvailable] = useState<boolean>(false);
   // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
   const [guideProfile, setGuideProfile] = useState<GuideProfile>('standard');
@@ -325,18 +327,58 @@ const App: React.FC = () => {
       setGuideProfile(savedGuideProfile);
     }
 
-    const savedApiKey = localStorage.getItem('gemini-api-key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    } else {
-      setIsSettingsOpen(true);
-    }
-
     const savedModel = localStorage.getItem('gemini-model');
     if (savedModel) {
       setSelectedModel(savedModel);
     }
   }, [setError]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadApiKey = async () => {
+      const localStorageApiKey = localStorage.getItem('gemini-api-key') ?? '';
+
+      if (isElectronEnv && window.electronAPI?.getApiKey && window.electronAPI?.setApiKey) {
+        const secureStorageAvailable = window.electronAPI.isSecureStorageAvailable
+          ? await window.electronAPI.isSecureStorageAvailable()
+          : false;
+        const secureApiKey = secureStorageAvailable ? await window.electronAPI.getApiKey() : '';
+        const migratedApiKey = secureApiKey || localStorageApiKey;
+
+        if (localStorageApiKey && secureStorageAvailable && !secureApiKey) {
+          const migrated = await window.electronAPI.setApiKey(localStorageApiKey);
+          if (migrated) {
+            localStorage.removeItem('gemini-api-key');
+          }
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setIsSecureApiStorageAvailable(secureStorageAvailable);
+        setApiKey(migratedApiKey);
+        setIsSettingsOpen(!migratedApiKey);
+        setIsApiKeyLoaded(true);
+        return;
+      }
+
+      if (!isMounted) {
+        return;
+      }
+
+      setApiKey(localStorageApiKey);
+      setIsSettingsOpen(!localStorageApiKey);
+      setIsApiKeyLoaded(true);
+    };
+
+    void loadApiKey();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isElectronEnv]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -352,9 +394,22 @@ const App: React.FC = () => {
     localStorage.setItem('guide-profile', guideProfile);
   }, [guideProfile]);
 
-  const handleApiKeySave = (newKey: string) => {
+  const handleApiKeySave = async (newKey: string): Promise<boolean> => {
+    if (isElectronEnv && isSecureApiStorageAvailable && window.electronAPI?.setApiKey) {
+      const saved = await window.electronAPI.setApiKey(newKey);
+      if (!saved) {
+        setError('Could not save the Gemini API key to secure storage.');
+        return false;
+      }
+
+      localStorage.removeItem('gemini-api-key');
+      setApiKey(newKey);
+      return true;
+    }
+
     setApiKey(newKey);
     localStorage.setItem('gemini-api-key', newKey);
+    return true;
   };
 
   const handleModelChange = (model: string) => {
@@ -388,10 +443,10 @@ const App: React.FC = () => {
   }, [apiKey, selectedModel]);
 
   useEffect(() => {
-    if (isSettingsOpen && apiKey) {
+    if (isApiKeyLoaded && isSettingsOpen && apiKey) {
       void refreshModels();
     }
-  }, [apiKey, isSettingsOpen, refreshModels]);
+  }, [apiKey, isApiKeyLoaded, isSettingsOpen, refreshModels]);
 
   // --- Session Management Callbacks ---
 
@@ -1174,6 +1229,7 @@ const App: React.FC = () => {
         onTimeFormatChange={setTimeFormat}
         apiKey={apiKey}
         onApiKeySave={handleApiKeySave}
+        isSecureApiStorageAvailable={isSecureApiStorageAvailable}
         selectedModel={selectedModel}
         availableModels={availableModels}
         isLoadingModels={isLoadingModels}

@@ -3,6 +3,10 @@ export {};
 declare global {
   interface Window {
     electronAPI?: {
+      isSecureStorageAvailable: () => Promise<boolean>;
+      getApiKey: () => Promise<string>;
+      setApiKey: (apiKey: string) => Promise<boolean>;
+      deleteApiKey: () => Promise<boolean>;
       captureScreenshot: () => Promise<string | null>;
       setRecordingEnabled: (enabled: boolean) => Promise<boolean>;
       onRecordingScreenshot: (

@@ -10,7 +10,8 @@ interface SettingsModalProps {
   timeFormat: TimeFormat;
   onTimeFormatChange: (format: TimeFormat) => void;
   apiKey: string;
-  onApiKeySave: (key: string) => void;
+  onApiKeySave: (key: string) => Promise<boolean>;
+  isSecureApiStorageAvailable?: boolean;
   selectedModel: string;
   availableModels: GeminiModelOption[];
   isLoadingModels: boolean;
@@ -28,6 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onTimeFormatChange,
   apiKey,
   onApiKeySave,
+  isSecureApiStorageAvailable = false,
   selectedModel,
   availableModels,
   isLoadingModels,
@@ -48,10 +50,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return null;
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (localApiKey.trim()) {
-        onApiKeySave(localApiKey.trim());
-        setSaveStatus('saved');
+        const saved = await onApiKeySave(localApiKey.trim());
+        setSaveStatus(saved ? 'saved' : 'error');
         setTimeout(() => setSaveStatus('idle'), 2000);
     } else {
         setSaveStatus('error');
@@ -171,7 +173,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-slate-900 dark:text-slate-100"
             />
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              Your API key is stored securely in your browser's local storage.
+              {isSecureApiStorageAvailable
+                ? 'Your API key is encrypted by Electron secure storage on this device.'
+                : 'Your API key is stored in this browser profile using local storage.'}
             </p>
           </div>
 

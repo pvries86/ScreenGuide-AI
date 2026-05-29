@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
@@ -47,11 +47,69 @@ let mouseHookProcess = null;
 let mouseHookInterface = null;
 let lastNativeCaptureAt = 0;
 const MOUSE_HOOK_THROTTLE_MS = 450;
+const secureStoreFileName = 'secure-settings.json';
 
 function broadcastNativeHookState(available) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('recording:native-state', { available });
   }
+}
+
+function getSecureSettingsPath() {
+  return path.join(app.getPath('userData'), secureStoreFileName);
+}
+
+async function readSecureSettings() {
+  try {
+    const settingsPath = getSecureSettingsPath();
+    if (!fs.existsSync(settingsPath)) {
+      return {};
+    }
+
+    const rawSettings = await fs.promises.readFile(settingsPath, 'utf8');
+    return JSON.parse(rawSettings);
+  } catch (error) {
+    console.error('Failed to read secure settings', error);
+    return {};
+  }
+}
+
+async function writeSecureSettings(settings) {
+  const settingsPath = getSecureSettingsPath();
+  await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 2), { mode: 0o600 });
+}
+
+async function getSecureApiKey() {
+  const settings = await readSecureSettings();
+  if (!settings.geminiApiKey) {
+    return '';
+  }
+
+  try {
+    return safeStorage.decryptString(Buffer.from(settings.geminiApiKey, 'base64'));
+  } catch (error) {
+    console.error('Failed to decrypt Gemini API key', error);
+    return '';
+  }
+}
+
+async function setSecureApiKey(apiKey) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure key storage is not available on this system.');
+  }
+
+  const settings = await readSecureSettings();
+  settings.geminiApiKey = safeStorage.encryptString(String(apiKey)).toString('base64');
+  await writeSecureSettings(settings);
+  return true;
+}
+
+async function deleteSecureApiKey() {
+  const settings = await readSecureSettings();
+  delete settings.geminiApiKey;
+  await writeSecureSettings(settings);
+  return true;
 }
 
 function createMainWindow() {
@@ -456,6 +514,22 @@ function stopGlobalRecording() {
 
 
 function registerIpcHandlers() {
+  ipcMain.handle("secure-store:is-available", async () => {
+    return safeStorage.isEncryptionAvailable();
+  });
+
+  ipcMain.handle("secure-store:get-api-key", async () => {
+    return getSecureApiKey();
+  });
+
+  ipcMain.handle("secure-store:set-api-key", async (_event, apiKey) => {
+    return setSecureApiKey(apiKey);
+  });
+
+  ipcMain.handle("secure-store:delete-api-key", async () => {
+    return deleteSecureApiKey();
+  });
+
   ipcMain.handle("capture:screenshot", async () => {
     // captureDisplayAtPoint returns an object { dataUrl, bounds, scaleFactor, displayId }
     // Ensure we return only the dataUrl string to the renderer so callers that
