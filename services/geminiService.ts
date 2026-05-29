@@ -88,6 +88,16 @@ type GenerateContentResponse = {
 
 const buildGeminiUrl = (path: string): string => `${GEMINI_API_BASE}${path}`;
 
+const throwIfAborted = (signal?: AbortSignal): void => {
+  if (!signal?.aborted) {
+    return;
+  }
+
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The operation was aborted.', 'AbortError');
+};
+
 const requestGemini = async <T>(path: string, apiKey: string, init: RequestInit = {}): Promise<T> => {
   assertApiKey(apiKey);
 
@@ -113,7 +123,8 @@ const generateGeminiContent = async (
   model: string,
   apiKey: string,
   parts: GeminiPart[],
-  generationConfig?: Record<string, unknown>
+  generationConfig?: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<string> => {
   const modelId = normalizeModelId(model);
   const response = await requestGemini<GenerateContentResponse>(
@@ -121,6 +132,7 @@ const generateGeminiContent = async (
     apiKey,
     {
       method: 'POST',
+      signal,
       body: JSON.stringify({
         contents: [{ parts }],
         ...(generationConfig ? { generationConfig } : {}),
@@ -221,7 +233,14 @@ export const listGeminiModels = async (apiKey: string): Promise<GeminiModelOptio
   return sortModels(models);
 };
 
-export const generateInstructions = async (images: File[], language: Language, apiKey: string, model: string = DEFAULT_GEMINI_MODEL): Promise<SopOutput> => {
+export const generateInstructions = async (
+  images: File[],
+  language: Language,
+  apiKey: string,
+  model: string = DEFAULT_GEMINI_MODEL,
+  signal?: AbortSignal,
+  onRequestStart?: () => void
+): Promise<SopOutput> => {
   const languageName = languageMap[language];
 
   const prompt = `You are an expert technical writer specializing in creating clear, concise Standard Operating Procedures (SOPs). Your task is to analyze the following sequence of screenshots and generate a step-by-step guide.
@@ -232,7 +251,9 @@ You must return the a single JSON object that strictly adheres to the provided s
 
   const imageParts = await Promise.all(
     images.map(async (file) => {
+      throwIfAborted(signal);
       const base64Data = await fileToBase64(file);
+      throwIfAborted(signal);
       return {
         inlineData: {
           data: base64Data,
@@ -242,6 +263,9 @@ You must return the a single JSON object that strictly adheres to the provided s
     })
   );
 
+  throwIfAborted(signal);
+  onRequestStart?.();
+
   const responseText = await generateGeminiContent(
     model,
     apiKey,
@@ -249,8 +273,11 @@ You must return the a single JSON object that strictly adheres to the provided s
     {
       responseMimeType: 'application/json',
       responseSchema: responseSchema,
-    }
+    },
+    signal
   );
+
+  throwIfAborted(signal);
 
   try {
     const parsedJson = JSON.parse(responseText);
@@ -294,7 +321,9 @@ export const generateIncrementalInstruction = async (
     language: Language,
     apiKey: string,
     context: { previousStep: string | null; nextStep: string | null },
-    model: string = DEFAULT_GEMINI_MODEL
+    model: string = DEFAULT_GEMINI_MODEL,
+    signal?: AbortSignal,
+    onRequestStart?: () => void
 ): Promise<IncrementalSopOutput> => {
     const languageName = languageMap[language];
     const { previousStep, nextStep } = context;
@@ -317,13 +346,16 @@ Your generated instruction must logically connect the previous and next steps in
 
     prompt += `\n\nYou must return a single JSON object that strictly adheres to the provided schema. The JSON object should contain a 'steps' array. This array should include one 'text' step for the instruction, followed by one 'image' step. For the 'image' step's content, use the exact placeholder string "INSERT_IMAGE_HERE".`;
 
+    throwIfAborted(signal);
     const imagePart = {
         inlineData: {
             data: await fileToBase64(image),
             mimeType: image.type,
         },
     };
-    
+    throwIfAborted(signal);
+    onRequestStart?.();
+
     const responseText = await generateGeminiContent(
         model,
         apiKey,
@@ -331,8 +363,11 @@ Your generated instruction must logically connect the previous and next steps in
         {
             responseMimeType: 'application/json',
             responseSchema: incrementalResponseSchema,
-        }
+        },
+        signal
     );
+
+    throwIfAborted(signal);
 
     try {
         const parsedJson = JSON.parse(responseText);

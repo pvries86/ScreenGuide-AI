@@ -10,7 +10,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { DEFAULT_GEMINI_MODEL, generateInstructions, listGeminiModels, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
 import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, GeminiModelOption } from './types';
-import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon } from './components/icons';
+import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon, LoadingIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
 
@@ -34,7 +34,27 @@ type RecordingScreenshotPayload =
       source?: 'native' | 'fallback';
     };
 
+type GenerationStatus = {
+  mode: 'generate' | 'merge';
+  label: string;
+  current?: number;
+  total?: number;
+  canCancel: boolean;
+};
+
 const POINTER_SVG_PATH = 'M16.5744 19.1999L12.6361 15.2616L11.4334 16.4643C10.2022 17.6955 9.58656 18.3111 8.92489 18.1658C8.26322 18.0204 7.96225 17.2035 7.3603 15.5696L5.3527 10.1205C4.15187 6.86106 3.55146 5.23136 4.39141 4.39141C5.23136 3.55146 6.86106 4.15187 10.1205 5.35271L15.5696 7.3603C17.2035 7.96225 18.0204 8.26322 18.1658 8.92489C18.3111 9.58656 17.6955 10.2022 16.4643 11.4334L15.2616 12.6361L19.1999 16.5744C19.6077 16.9821 19.8116 17.186 19.9058 17.4135C20.0314 17.7168 20.0314 18.0575 19.9058 18.3608C19.8116 18.5882 19.6077 18.7921 19.1999 19.1999C18.7921 19.6077 18.5882 19.8116 18.3608 19.9058C18.0575 20.0314 17.7168 20.0314 17.4135 19.9058C17.186 19.8116 16.9821 19.6077 16.5744 19.1999Z';
+
+const isAbortError = (error: unknown): boolean => {
+  return error instanceof DOMException && error.name === 'AbortError';
+};
+
+const throwIfAborted = (signal: AbortSignal): void => {
+  if (signal.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('The operation was aborted.', 'AbortError');
+  }
+};
 
 const highlightPointerOnImage = (dataUrl: string, pointer: RecordingPointerMeta): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -150,6 +170,8 @@ const App: React.FC = () => {
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -175,9 +197,17 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('en');
   
   const isElectronEnv = typeof window !== 'undefined' && Boolean(window.electronAPI);
+  const generationAbortControllerRef = useRef<AbortController | null>(null);
 
   // Derived state for unsaved changes
   const isModified = canUndo;
+  const isAiOperationActive = isLoading || isMerging;
+
+  useEffect(() => {
+    return () => {
+      generationAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   // --- Session Recovery on Load ---
   useEffect(() => {
@@ -747,7 +777,11 @@ const App: React.FC = () => {
     handleStepsChange(newSteps);
   };
 
-  const handleRegenerateStep = async (stepIndex: number, mode: RegenerationMode): Promise<void> => {
+  const handleCancelAiOperation = useCallback(() => {
+    generationAbortControllerRef.current?.abort();
+  }, []);
+
+  const handleRegenerateStep = async (stepIndex: number, mode: RegenerationMode): Promise<string> => {
     if (!apiKey) {
         setError("Please set your Gemini API key in the settings before regenerating.");
         setIsSettingsOpen(true);
@@ -790,10 +824,7 @@ const App: React.FC = () => {
         apiKey,
         selectedModel
       );
-      
-      const newSteps = [...instructionSteps];
-      newSteps[stepIndex] = { ...newSteps[stepIndex], content: newContent };
-      setDocumentState({ ...documentState, steps: newSteps });
+      return newContent;
 
     } catch (e) {
       console.error(e);
@@ -806,6 +837,7 @@ const App: React.FC = () => {
   };
 
   const generateAll = async () => {
+    setNotice(null);
     if (!apiKey) {
       setError("Please set your Gemini API key in the settings before generating.");
       setIsSettingsOpen(true);
@@ -816,16 +848,54 @@ const App: React.FC = () => {
       return;
     }
     setIsLoading(true);
+    const abortController = new AbortController();
+    generationAbortControllerRef.current = abortController;
+    setGenerationStatus({
+      mode: 'generate',
+      label: 'Preparing screenshots',
+      current: 0,
+      total: images.length,
+      canCancel: true,
+    });
     setError(null);
-    
+    setNotice(null);
+
     try {
-      const { title: newTitle, steps } = await generateInstructions(images, language, apiKey, selectedModel);
+      const { title: newTitle, steps } = await generateInstructions(
+        images,
+        language,
+        apiKey,
+        selectedModel,
+        abortController.signal,
+        () => setGenerationStatus({
+          mode: 'generate',
+          label: 'Sending to Gemini',
+          current: images.length,
+          total: images.length,
+          canCancel: true,
+        })
+      );
+      setGenerationStatus({
+        mode: 'generate',
+        label: 'Building guide',
+        current: images.length,
+        total: images.length,
+        canCancel: false,
+      });
       resetDocumentState({ title: newTitle, steps });
     } catch (e) {
-      console.error(e);
-      const errorMessage = e instanceof Error ? e.message : 'Failed to generate instructions. Please check your API key and try again.';
-      setError(errorMessage);
+      if (isAbortError(e)) {
+        setNotice('Generation cancelled.');
+      } else {
+        console.error(e);
+        const errorMessage = e instanceof Error ? e.message : 'Failed to generate instructions. Please check your API key and try again.';
+        setError(errorMessage);
+      }
     } finally {
+      if (generationAbortControllerRef.current === abortController) {
+        generationAbortControllerRef.current = null;
+      }
+      setGenerationStatus(null);
       setIsLoading(false);
     }
   };
@@ -848,21 +918,37 @@ const App: React.FC = () => {
   };
 
   const handleMergeInstructions = async () => {
+    setNotice(null);
     if (!apiKey) {
       setError("Please set your Gemini API key in the settings before merging.");
       setIsSettingsOpen(true);
       return;
     }
     setIsMerging(true);
+    const abortController = new AbortController();
+    generationAbortControllerRef.current = abortController;
+    setGenerationStatus({
+      mode: 'merge',
+      label: 'Finding new screenshots',
+      current: 0,
+      canCancel: true,
+    });
     setError(null);
     try {
+        throwIfAborted(abortController.signal);
         const existingImageIndices = new Set(instructionSteps.filter(step => step.type === 'image').map(step => parseInt(step.content, 10) - 1));
         const newImagesToProcess = images.map((file, index) => ({ file, index })).filter(({ index }) => !existingImageIndices.has(index));
         if (newImagesToProcess.length === 0) {
             setError("No new images to merge.");
-            setIsMerging(false);
             return;
         }
+        setGenerationStatus({
+          mode: 'merge',
+          label: 'Generating steps',
+          current: 0,
+          total: newImagesToProcess.length,
+          canCancel: true,
+        });
         const existingBlocks = new Map<number, InstructionStep[]>();
         let currentBlock: InstructionStep[] = [], currentImageIndex = -1;
         instructionSteps.forEach(step => {
@@ -882,21 +968,48 @@ const App: React.FC = () => {
             if (textStep) textStepContentMap.set(imageIndex, textStep.content);
         });
 
+        let completedSteps = 0;
         const generationPromises = newImagesToProcess.map(async ({ file, index }) => {
+            throwIfAborted(abortController.signal);
             let prevImageIndex = -1;
             for (let i = index - 1; i >= 0; i--) if (existingImageIndices.has(i)) { prevImageIndex = i; break; }
             let nextImageIndex = -1;
             for (let i = index + 1; i < images.length; i++) if (existingImageIndices.has(i)) { nextImageIndex = i; break; }
             const context = { previousStep: prevImageIndex !== -1 ? textStepContentMap.get(prevImageIndex) ?? null : null, nextStep: nextImageIndex !== -1 ? textStepContentMap.get(nextImageIndex) ?? null : null };
-            const result = await generateIncrementalInstruction(file, language, apiKey, context, selectedModel);
+            const result = await generateIncrementalInstruction(
+              file,
+              language,
+              apiKey,
+              context,
+              selectedModel,
+              abortController.signal,
+              undefined
+            );
+            throwIfAborted(abortController.signal);
             const processedSteps = result.steps.map(step => step.type === 'image' ? { ...step, content: String(index + 1) } : step);
+            completedSteps += 1;
+            setGenerationStatus({
+              mode: 'merge',
+              label: 'Generating steps',
+              current: completedSteps,
+              total: newImagesToProcess.length,
+              canCancel: true,
+            });
             return { index, steps: processedSteps };
         });
 
         const newlyGeneratedStepsData = await Promise.all(generationPromises);
+        throwIfAborted(abortController.signal);
         const newlyGeneratedStepsMap = new Map<number, InstructionStep[]>();
         newlyGeneratedStepsData.forEach(data => newlyGeneratedStepsMap.set(data.index, data.steps));
 
+        setGenerationStatus({
+          mode: 'merge',
+          label: 'Updating guide',
+          current: newImagesToProcess.length,
+          total: newImagesToProcess.length,
+          canCancel: false,
+        });
         const finalSteps: InstructionStep[] = [];
         for (let i = 0; i < images.length; i++) {
             if (existingBlocks.has(i)) finalSteps.push(...(existingBlocks.get(i) || []));
@@ -904,9 +1017,18 @@ const App: React.FC = () => {
         }
         setDocumentState({ ...documentState, steps: finalSteps });
     } catch (e) {
-        console.error(e);
-        setError(e instanceof Error ? e.message : 'Failed to merge new steps. Please try again.');
+        if (isAbortError(e)) {
+            setNotice('Merge cancelled.');
+        } else {
+            abortController.abort();
+            console.error(e);
+            setError(e instanceof Error ? e.message : 'Failed to merge new steps. Please try again.');
+        }
     } finally {
+        if (generationAbortControllerRef.current === abortController) {
+            generationAbortControllerRef.current = null;
+        }
+        setGenerationStatus(null);
         setIsMerging(false);
     }
   };
@@ -925,6 +1047,9 @@ const App: React.FC = () => {
 
   const imagesInUseCount = useMemo(() => new Set(instructionSteps.filter(s => s.type === 'image').map(s => s.content)).size, [instructionSteps]);
   const canMerge = instructionSteps.length > 0 && images.length > imagesInUseCount;
+  const generationProgressText = generationStatus?.total
+    ? `${generationStatus.current ?? 0} / ${generationStatus.total}`
+    : null;
 
   return (
     <div className="flex w-full min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200">
@@ -964,15 +1089,39 @@ const App: React.FC = () => {
                             <button onClick={redo} disabled={!canRedo} className="flex items-center justify-center gap-2 px-3 py-3 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all" title="Redo (Ctrl+Y)"><RedoIcon className="w-5 h-5" /></button>
                             <button onClick={handleSaveSession} disabled={isSaving || !isModified} className="flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-slate-700 text-primary dark:text-indigo-400 border border-primary dark:border-indigo-400 font-semibold rounded-lg shadow-sm hover:bg-indigo-50 dark:hover:bg-slate-600 disabled:bg-slate-200 dark:disabled:bg-slate-600 disabled:text-slate-500 disabled:border-slate-300 dark:disabled:border-slate-500 disabled:cursor-not-allowed transition-all"><SaveIcon className="w-5 h-5" />{isSaving ? 'Saving...' : 'Save'}</button>
                             {canMerge ? (
-                                <button onClick={handleMergeInstructions} disabled={isMerging || isLoading} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-all"><MergeIcon />{isMerging ? 'Merging...' : 'Add & Merge'}</button>
+                                <button onClick={handleMergeInstructions} disabled={isAiOperationActive} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-all"><MergeIcon />{isMerging ? 'Merging...' : 'Add & Merge'}</button>
                             ) : (
-                                <button onClick={handleGenerate} disabled={isLoading || isMerging || images.length === 0} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-all"><GenerateIcon />{isLoading ? 'Generating...' : (instructionSteps.length > 0 ? 'Regenerate All' : 'Generate')}</button>
+                                <button onClick={handleGenerate} disabled={isAiOperationActive || images.length === 0} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-all"><GenerateIcon />{isLoading ? 'Generating...' : (instructionSteps.length > 0 ? 'Regenerate All' : 'Generate')}</button>
                             )}
                         </div>
                     </div>
+                    {generationStatus && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg" role="status" aria-live="polite">
+                            <div className="flex items-center gap-3">
+                                <LoadingIcon />
+                                <div>
+                                    <p className="font-semibold text-blue-900 dark:text-blue-100">{generationStatus.label}</p>
+                                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                                        {generationStatus.mode === 'merge' ? 'Adding new screenshots to the guide.' : 'Generating a guide from your screenshots.'}
+                                        {generationProgressText ? ` ${generationProgressText}` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            {generationStatus.canCancel && (
+                                <button
+                                    type="button"
+                                    onClick={handleCancelAiOperation}
+                                    className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-md border border-blue-300 dark:border-blue-600 text-blue-800 dark:text-blue-100 bg-white dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    {notice && (<div className="bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-500 text-blue-800 dark:text-blue-200 p-4 rounded-md" role="status"><p>{notice}</p></div>)}
                     {error && (<div className="bg-red-100 dark:bg-red-900/30 border-l-4 border-red-500 text-red-700 dark:text-red-300 p-4 rounded-md" role="alert"><p className="font-bold">Error</p><p>{error}</p></div>)}
                     {isModified && (<div className="bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-800 dark:text-yellow-300 p-4 rounded-md" role="alert"><p className="font-bold">Unsaved Changes</p><p>You have unsaved changes. Click 'Save' to keep them.</p></div>)}
-                    <InstructionDisplay title={title} onTitleChange={handleTitleChange} steps={instructionSteps} images={images} isLoading={isLoading || isMerging} onStepsChange={handleStepsChange} onDeleteStep={handleDeleteStep} onRegenerateStep={handleRegenerateStep} regeneratingIndex={regeneratingIndex} onAnnotateImage={handleAnnotateImage} />
+                    <InstructionDisplay title={title} onTitleChange={handleTitleChange} steps={instructionSteps} images={images} isLoading={isLoading || isMerging} loadingLabel={generationStatus?.label} onStepsChange={handleStepsChange} onDeleteStep={handleDeleteStep} onRegenerateStep={handleRegenerateStep} regeneratingIndex={regeneratingIndex} onAnnotateImage={handleAnnotateImage} />
                 </div>
             </div>
         </div>

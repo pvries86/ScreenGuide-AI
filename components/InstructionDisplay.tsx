@@ -13,18 +13,19 @@ interface InstructionDisplayProps {
   steps: InstructionStep[];
   images: File[];
   isLoading: boolean;
+  loadingLabel?: string;
   onStepsChange: (newSteps: InstructionStep[]) => void;
   onDeleteStep: (stepIndex: number) => void;
-  onRegenerateStep: (stepIndex: number, mode: RegenerationMode) => Promise<void>;
+  onRegenerateStep: (stepIndex: number, mode: RegenerationMode) => Promise<string>;
   regeneratingIndex: number | null;
   onAnnotateImage: (imageIndex: number) => void;
 }
 
-const LoadingState: React.FC = () => (
+const LoadingState: React.FC<{ label?: string }> = ({ label }) => (
     <div className="flex flex-col items-center justify-center p-12 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
         <LoadingIcon />
         <p className="mt-4 text-lg font-semibold text-slate-600 dark:text-slate-300 animate-pulse">
-            AI is analyzing your screenshots...
+            {label ?? 'AI is analyzing your screenshots...'}
         </p>
         <p className="text-slate-500 dark:text-slate-400">This may take a moment.</p>
     </div>
@@ -42,7 +43,7 @@ const StepEditor: React.FC<{
     index: number;
     steps: InstructionStep[];
     onStepsChange: (newSteps: InstructionStep[]) => void;
-    onRegenerateStep: (stepIndex: number, mode: RegenerationMode) => Promise<void>;
+    onRegenerateStep: (stepIndex: number, mode: RegenerationMode) => Promise<string>;
     regeneratingIndex: number | null;
     onCancel: () => void;
 }> = ({ step, index, steps, onStepsChange, onRegenerateStep, regeneratingIndex, onCancel }) => {
@@ -65,8 +66,8 @@ const StepEditor: React.FC<{
 
     const handleRegenerate = async (mode: RegenerationMode) => {
         try {
-            await onRegenerateStep(index, mode);
-            // No need to set state here; the useEffect will catch the prop change.
+            const regeneratedContent = await onRegenerateStep(index, mode);
+            setEditedContent(regeneratedContent);
         } catch (error) {
             // The error is already handled and displayed by the parent App component.
             console.error("Regeneration failed:", error);
@@ -155,8 +156,8 @@ const Inserter: React.FC<{ onClick: () => void; onHover: () => void; onLeave: ()
     </div>
 );
 
-export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({ 
-    title, onTitleChange, steps, images, isLoading, onStepsChange, onDeleteStep, onRegenerateStep, regeneratingIndex, onAnnotateImage
+export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
+    title, onTitleChange, steps, images, isLoading, loadingLabel, onStepsChange, onDeleteStep, onRegenerateStep, regeneratingIndex, onAnnotateImage
 }) => {
     const displayRef = useRef<HTMLDivElement>(null);
     const [imageUrls, setImageUrls] = useState<string[]>([]);
@@ -293,7 +294,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
         setEditingIndex(insertAtIndex); // Immediately edit the new step
     };
 
-    if (isLoading) return <LoadingState />;
+    if (isLoading) return <LoadingState label={loadingLabel} />;
     if (steps.length === 0) return <EmptyState />;
 
     let textStepCounter = 0;
