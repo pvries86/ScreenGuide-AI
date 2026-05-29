@@ -164,6 +164,46 @@ const generateGeminiContent = async (
   return responseText;
 };
 
+const repairJsonResponse = async (
+  invalidJson: string,
+  schema: Record<string, unknown>,
+  model: string,
+  apiKey: string,
+  signal: AbortSignal | undefined,
+  description: string
+): Promise<string> => {
+  return generateGeminiContent(
+    model,
+    apiKey,
+    [{
+      text: `Repair this Gemini response so it is valid JSON for ${description}. Return only the repaired JSON object, with no markdown or explanation.\n\nInvalid response:\n${invalidJson}`,
+    }],
+    {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+    signal
+  );
+};
+
+const parseSopOutput = (responseText: string): SopOutput => {
+  const parsedJson = JSON.parse(responseText);
+  if (parsedJson && typeof parsedJson.title === 'string' && Array.isArray(parsedJson.steps) && parsedJson.steps.every((item: any) => 'type' in item && 'content' in item)) {
+    return parsedJson as SopOutput;
+  }
+
+  throw new Error('Parsed JSON does not match expected format.');
+};
+
+const parseIncrementalOutput = (responseText: string): IncrementalSopOutput => {
+  const parsedJson = JSON.parse(responseText);
+  if (parsedJson && Array.isArray(parsedJson.steps)) {
+    return parsedJson as IncrementalSopOutput;
+  }
+
+  throw new Error('Parsed JSON does not match expected incremental format.');
+};
+
 const getModelLabel = (model: GeminiModel): string => {
   if (model.displayName) {
     return model.displayName;
@@ -294,15 +334,24 @@ You must return the a single JSON object that strictly adheres to the provided s
   throwIfAborted(signal);
 
   try {
-    const parsedJson = JSON.parse(responseText);
-    // Basic validation to ensure it's an array of instruction steps
-    if (parsedJson && typeof parsedJson.title === 'string' && Array.isArray(parsedJson.steps) && parsedJson.steps.every((item: any) => 'type' in item && 'content' in item)) {
-        return parsedJson as SopOutput;
-    }
-    throw new Error('Parsed JSON does not match expected format.');
+    return parseSopOutput(responseText);
   } catch (error) {
-    console.error("Failed to parse Gemini response:", responseText);
-    throw new Error("Received an invalid format from the AI. Please try again.");
+    console.warn("Gemini returned invalid guide JSON; attempting repair.", error);
+    try {
+      const repairedResponseText = await repairJsonResponse(
+        responseText,
+        responseSchema,
+        model,
+        apiKey,
+        signal,
+        'a screenshot guide with title and steps'
+      );
+      throwIfAborted(signal);
+      return parseSopOutput(repairedResponseText);
+    } catch (repairError) {
+      console.error("Failed to parse Gemini response:", responseText, repairError);
+      throw new Error("Received an invalid format from the AI. Please try again.");
+    }
   }
 };
 
@@ -389,14 +438,24 @@ Your generated instruction must logically connect the previous and next steps in
     throwIfAborted(signal);
 
     try {
-        const parsedJson = JSON.parse(responseText);
-        if (parsedJson && Array.isArray(parsedJson.steps)) {
-            return parsedJson as IncrementalSopOutput;
-        }
-        throw new Error('Parsed JSON does not match expected incremental format.');
+        return parseIncrementalOutput(responseText);
     } catch (error) {
-        console.error("Failed to parse Gemini response for incremental step:", responseText);
-        throw new Error("Received an invalid format from the AI for the new step. Please try again.");
+        console.warn("Gemini returned invalid incremental JSON; attempting repair.", error);
+        try {
+            const repairedResponseText = await repairJsonResponse(
+                responseText,
+                incrementalResponseSchema,
+                model,
+                apiKey,
+                signal,
+                'a new guide step with text and image placeholder steps'
+            );
+            throwIfAborted(signal);
+            return parseIncrementalOutput(repairedResponseText);
+        } catch (repairError) {
+            console.error("Failed to parse Gemini response for incremental step:", responseText, repairError);
+            throw new Error("Received an invalid format from the AI for the new step. Please try again.");
+        }
     }
 };
 
