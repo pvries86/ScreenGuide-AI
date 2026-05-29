@@ -549,6 +549,26 @@ const App: React.FC = () => {
     setPreviewImageIndex(null);
   }, []);
 
+  const handlePreviousPreviewImage = useCallback(() => {
+    setPreviewImageIndex((currentIndex) => {
+      if (currentIndex === null || images.length === 0) {
+        return currentIndex;
+      }
+
+      return (currentIndex - 1 + images.length) % images.length;
+    });
+  }, [images.length]);
+
+  const handleNextPreviewImage = useCallback(() => {
+    setPreviewImageIndex((currentIndex) => {
+      if (currentIndex === null || images.length === 0) {
+        return currentIndex;
+      }
+
+      return (currentIndex + 1) % images.length;
+    });
+  }, [images.length]);
+
   const handleAnnotateFromPreview = useCallback(() => {
     if (previewImageIndex !== null) {
       setAnnotatingImageIndex(previewImageIndex);
@@ -977,8 +997,12 @@ const App: React.FC = () => {
         isOpen={previewImageIndex !== null && previewObjectUrl !== null}
         imageUrl={previewObjectUrl}
         imageName={previewImageIndex !== null ? images[previewImageIndex]?.name : undefined}
+        currentIndex={previewImageIndex ?? undefined}
+        totalImages={images.length}
         onClose={handleClosePreview}
         onAnnotate={previewImageIndex !== null ? handleAnnotateFromPreview : undefined}
+        onPrevious={handlePreviousPreviewImage}
+        onNext={handleNextPreviewImage}
       />
       <ConfirmModal
         isOpen={isGenerateConfirmOpen}

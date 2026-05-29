@@ -4,11 +4,27 @@ interface ImagePreviewModalProps {
   isOpen: boolean;
   imageUrl: string | null;
   imageName?: string;
+  currentIndex?: number;
+  totalImages?: number;
   onClose: () => void;
   onAnnotate?: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }
 
-export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ isOpen, imageUrl, imageName, onClose, onAnnotate }) => {
+export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
+  isOpen,
+  imageUrl,
+  imageName,
+  currentIndex,
+  totalImages,
+  onClose,
+  onAnnotate,
+  onPrevious,
+  onNext,
+}) => {
+  const canNavigate = Boolean(onPrevious && onNext && totalImages && totalImages > 1);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -16,6 +32,12 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ isOpen, im
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
+      } else if (event.key === 'ArrowLeft' && canNavigate) {
+        event.preventDefault();
+        onPrevious?.();
+      } else if (event.key === 'ArrowRight' && canNavigate) {
+        event.preventDefault();
+        onNext?.();
       }
     };
 
@@ -23,7 +45,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ isOpen, im
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [canNavigate, isOpen, onClose, onNext, onPrevious]);
 
   if (!isOpen || !imageUrl) {
     return null;
@@ -44,6 +66,11 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ isOpen, im
             <span className="text-sm font-medium truncate max-w-[60vw]">
               {imageName ?? 'Screenshot'}
             </span>
+            {currentIndex !== undefined && totalImages !== undefined && (
+              <span className="text-xs text-slate-400">
+                {currentIndex + 1} of {totalImages}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {onAnnotate && (
@@ -64,7 +91,33 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ isOpen, im
             </button>
           </div>
         </header>
-        <div className="flex-1 overflow-auto bg-slate-950 flex items-center justify-center p-6">
+        <div className="relative flex-1 overflow-auto bg-slate-950 flex items-center justify-center p-6">
+          {canNavigate && (
+            <>
+              <button
+                type="button"
+                onClick={onPrevious}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 h-11 w-11 rounded-full bg-slate-900/80 text-white border border-white/20 shadow-lg flex items-center justify-center hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-white/70"
+                aria-label="Show previous screenshot"
+                title="Previous screenshot"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 h-11 w-11 rounded-full bg-slate-900/80 text-white border border-white/20 shadow-lg flex items-center justify-center hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-white/70"
+                aria-label="Show next screenshot"
+                title="Next screenshot"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </>
+          )}
           <img
             src={imageUrl}
             alt={imageName ?? 'Screenshot preview'}
