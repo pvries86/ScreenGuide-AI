@@ -1,4 +1,4 @@
-import { fileToBase64 } from '../utils/fileUtils';
+import { prepareImageForGemini } from '../utils/fileUtils';
 import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep, GeminiModelOption, GuideProfile } from '../types';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
@@ -266,12 +266,12 @@ You must return the a single JSON object that strictly adheres to the provided s
   const imageParts = await Promise.all(
     images.map(async (file) => {
       throwIfAborted(signal);
-      const base64Data = await fileToBase64(file);
+      const imagePart = await prepareImageForGemini(file);
       throwIfAborted(signal);
       return {
         inlineData: {
-          data: base64Data,
-          mimeType: file.type,
+          data: imagePart.data,
+          mimeType: imagePart.mimeType,
         },
       };
     })
@@ -364,10 +364,12 @@ Your generated instruction must logically connect the previous and next steps in
     prompt += `\n\nYou must return a single JSON object that strictly adheres to the provided schema. The JSON object should contain a 'steps' array. This array should include one 'text' step for the instruction, followed by one 'image' step. For the 'image' step's content, use the exact placeholder string "INSERT_IMAGE_HERE".`;
 
     throwIfAborted(signal);
+    const preparedImage = await prepareImageForGemini(image);
+    throwIfAborted(signal);
     const imagePart = {
         inlineData: {
-            data: await fileToBase64(image),
-            mimeType: image.type,
+            data: preparedImage.data,
+            mimeType: preparedImage.mimeType,
         },
     };
     throwIfAborted(signal);
@@ -461,10 +463,11 @@ export const regenerateInstruction = async (
   // FIX: Explicitly type `contentParts` to allow both text and image parts.
   const contentParts: ({ text: string; } | { inlineData: { data: string; mimeType: string; }; })[] = [{ text: prompt }];
   if (image) {
+    const preparedImage = await prepareImageForGemini(image);
     const imagePart = {
       inlineData: {
-        data: await fileToBase64(image),
-        mimeType: image.type,
+        data: preparedImage.data,
+        mimeType: preparedImage.mimeType,
       },
     };
     contentParts.push(imagePart);
