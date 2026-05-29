@@ -497,6 +497,23 @@ const App: React.FC = () => {
     return true;
   };
 
+  const handleApiKeyDelete = async (): Promise<boolean> => {
+    if (isElectronEnv && isSecureApiStorageAvailable && window.electronAPI?.deleteApiKey) {
+      const deleted = await window.electronAPI.deleteApiKey();
+      if (!deleted) {
+        setError('Could not remove the Gemini API key from secure storage.');
+        return false;
+      }
+    }
+
+    localStorage.removeItem('gemini-api-key');
+    setApiKey('');
+    setAvailableModels([]);
+    setModelLoadError(null);
+    setIsSettingsOpen(true);
+    return true;
+  };
+
   const handleModelChange = (model: string) => {
     setSelectedModel(model);
     localStorage.setItem('gemini-model', model);
@@ -1447,6 +1464,7 @@ const App: React.FC = () => {
         onTimeFormatChange={setTimeFormat}
         apiKey={apiKey}
         onApiKeySave={handleApiKeySave}
+        onApiKeyDelete={handleApiKeyDelete}
         isSecureApiStorageAvailable={isSecureApiStorageAvailable}
         selectedModel={selectedModel}
         availableModels={availableModels}
