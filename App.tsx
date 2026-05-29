@@ -205,6 +205,7 @@ const App: React.FC = () => {
   const [annotatingImageIndex, setAnnotatingImageIndex] = useState<number | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [previewGalleryUrls, setPreviewGalleryUrls] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState<boolean>(false);
   const [nativeRecordingAvailable, setNativeRecordingAvailable] = useState<boolean>(false);
@@ -747,7 +748,25 @@ const App: React.FC = () => {
     };
   }, [previewImageIndex, images]);
 
+  useEffect(() => {
+    if (previewImageIndex === null) {
+      setPreviewGalleryUrls([]);
+      return;
+    }
+
+    const galleryUrls = images.map((file) => URL.createObjectURL(file));
+    setPreviewGalleryUrls(galleryUrls);
+
+    return () => {
+      galleryUrls.forEach(URL.revokeObjectURL);
+    };
+  }, [previewImageIndex, images]);
+
   const handleOpenPreview = useCallback((index: number) => {
+    setPreviewImageIndex(index);
+  }, []);
+
+  const handleSelectPreviewImage = useCallback((index: number) => {
     setPreviewImageIndex(index);
   }, []);
 
@@ -1440,12 +1459,15 @@ const App: React.FC = () => {
         isOpen={previewImageIndex !== null && previewObjectUrl !== null}
         imageUrl={previewObjectUrl}
         imageName={previewImageIndex !== null ? images[previewImageIndex]?.name : undefined}
+        imageUrls={previewGalleryUrls}
+        imageNames={images.map((image) => image.name)}
         currentIndex={previewImageIndex ?? undefined}
         totalImages={images.length}
         onClose={handleClosePreview}
         onAnnotate={previewImageIndex !== null ? handleAnnotateFromPreview : undefined}
         onPrevious={handlePreviousPreviewImage}
         onNext={handleNextPreviewImage}
+        onSelectImage={handleSelectPreviewImage}
       />
       <ConfirmModal
         isOpen={isGenerateConfirmOpen}

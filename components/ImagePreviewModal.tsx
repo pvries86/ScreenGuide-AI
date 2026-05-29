@@ -1,29 +1,40 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface ImagePreviewModalProps {
   isOpen: boolean;
   imageUrl: string | null;
   imageName?: string;
+  imageUrls?: string[];
+  imageNames?: string[];
   currentIndex?: number;
   totalImages?: number;
   onClose: () => void;
   onAnnotate?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
+  onSelectImage?: (index: number) => void;
 }
 
 export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   isOpen,
   imageUrl,
   imageName,
+  imageUrls = [],
+  imageNames = [],
   currentIndex,
   totalImages,
   onClose,
   onAnnotate,
   onPrevious,
   onNext,
+  onSelectImage,
 }) => {
   const canNavigate = Boolean(onPrevious && onNext && totalImages && totalImages > 1);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    setZoom(1);
+  }, [imageUrl]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,6 +93,35 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 Annotate
               </button>
             )}
+            <div className="flex items-center gap-1 border-l border-slate-700 pl-2 ml-1">
+              <button
+                type="button"
+                onClick={() => setZoom((currentZoom) => Math.max(0.5, Number((currentZoom - 0.25).toFixed(2))))}
+                className="px-3 py-2 text-sm font-semibold rounded-md bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                aria-label="Zoom out"
+                title="Zoom out"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom(1)}
+                className="px-3 py-2 text-sm font-semibold rounded-md bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                aria-label="Reset zoom"
+                title="Reset zoom"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom((currentZoom) => Math.min(3, Number((currentZoom + 0.25).toFixed(2))))}
+                className="px-3 py-2 text-sm font-semibold rounded-md bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                aria-label="Zoom in"
+                title="Zoom in"
+              >
+                +
+              </button>
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -121,9 +161,29 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           <img
             src={imageUrl}
             alt={imageName ?? 'Screenshot preview'}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-lg transition-transform origin-center"
+            style={{ transform: `scale(${zoom})` }}
           />
         </div>
+        {imageUrls.length > 1 && onSelectImage && currentIndex !== undefined && (
+          <div className="flex gap-2 overflow-x-auto p-3 border-t border-slate-700 bg-slate-900">
+            {imageUrls.map((url, index) => (
+              <button
+                key={`${url}-${index}`}
+                type="button"
+                onClick={() => onSelectImage(index)}
+                className={`relative h-16 w-28 flex-shrink-0 rounded-md overflow-hidden border-2 focus:outline-none focus:ring-2 focus:ring-primary ${index === currentIndex ? 'border-primary' : 'border-slate-700 hover:border-slate-500'}`}
+                aria-label={`Show screenshot ${index + 1}`}
+                title={imageNames[index] ?? `Screenshot ${index + 1}`}
+              >
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <span className="absolute top-1 left-1 bg-black/70 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+                  {index + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
