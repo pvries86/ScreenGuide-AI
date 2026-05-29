@@ -11,7 +11,7 @@ import { DEFAULT_GEMINI_MODEL, generateInstructions, listGeminiModels, regenerat
 import * as db from './services/dbService';
 import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, GeminiModelOption, GuideProfile } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon, LoadingIcon } from './components/icons';
-import { base64ToFile } from './utils/fileUtils';
+import { base64ToFile, createImageFingerprint } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
 
 interface DocumentState {
@@ -63,6 +63,21 @@ const throwIfAborted = (signal: AbortSignal): void => {
       ? signal.reason
       : new DOMException('The operation was aborted.', 'AbortError');
   }
+};
+
+const getFingerprintDistance = (a: string, b: string): number => {
+  if (a.length !== b.length) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let distance = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      distance += 1;
+    }
+  }
+
+  return distance;
 };
 
 const highlightPointerOnImage = (dataUrl: string, pointer: RecordingPointerMeta): Promise<string> => {
@@ -175,6 +190,7 @@ const App: React.FC = () => {
   
   // File State (not part of undo/redo history)
   const [images, setImages] = useState<File[]>([]);
+  const [duplicateImageGroups, setDuplicateImageGroups] = useState<number[][]>([]);
   
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -214,6 +230,63 @@ const App: React.FC = () => {
   // Derived state for unsaved changes
   const isModified = canUndo;
   const isAiOperationActive = isLoading || isMerging;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const detectDuplicateImages = async () => {
+      if (images.length < 2) {
+        setDuplicateImageGroups([]);
+        return;
+      }
+
+      try {
+        const fingerprints = await Promise.all(images.map(createImageFingerprint));
+        if (isCancelled) {
+          return;
+        }
+
+        const duplicateGroups: number[][] = [];
+        const usedIndices = new Set<number>();
+
+        fingerprints.forEach((fingerprint, index) => {
+          if (usedIndices.has(index)) {
+            return;
+          }
+
+          const group = [index];
+          for (let candidateIndex = index + 1; candidateIndex < fingerprints.length; candidateIndex++) {
+            if (usedIndices.has(candidateIndex)) {
+              continue;
+            }
+
+            const distance = getFingerprintDistance(fingerprint, fingerprints[candidateIndex]);
+            if (distance <= 5) {
+              group.push(candidateIndex);
+              usedIndices.add(candidateIndex);
+            }
+          }
+
+          if (group.length > 1) {
+            duplicateGroups.push(group);
+          }
+        });
+
+        setDuplicateImageGroups(duplicateGroups);
+      } catch (error) {
+        console.error('Failed to detect duplicate screenshots', error);
+        if (!isCancelled) {
+          setDuplicateImageGroups([]);
+        }
+      }
+    };
+
+    void detectDuplicateImages();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [images]);
 
   useEffect(() => {
     return () => {
@@ -699,6 +772,16 @@ const App: React.FC = () => {
     setError(null);
   };
 
+  const handleRemoveDuplicateImages = useCallback(() => {
+    if (duplicateImageGroups.length === 0) {
+      return;
+    }
+
+    const duplicateIndices = new Set(duplicateImageGroups.flatMap((group) => group.slice(1)));
+    setImages((currentImages) => currentImages.filter((_, index) => !duplicateIndices.has(index)));
+    setError(null);
+  }, [duplicateImageGroups]);
+
   const appendImageToQueue = useCallback((file: File) => {
     if (instructionSteps.length === 0) {
       resetDocumentState({ title: '', steps: [] });
@@ -1140,6 +1223,23 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-6">
                     <ImageUploader onImagesChange={handleImagesChange} images={images} onPreviewImage={handleOpenPreview} />
+                    {duplicateImageGroups.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg">
+                            <div>
+                                <h3 className="text-base font-semibold text-amber-900 dark:text-amber-100">Possible duplicate screenshots</h3>
+                                <p className="text-sm text-amber-800 dark:text-amber-200">
+                                    {duplicateImageGroups.map((group) => group.map((index) => index + 1).join(', ')).join(' | ')}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleRemoveDuplicateImages}
+                                className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-md border border-amber-300 dark:border-amber-600 text-amber-900 dark:text-amber-100 bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            >
+                                Remove duplicates
+                            </button>
+                        </div>
+                    )}
                     {isElectronEnv && (
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg">
                             <div>

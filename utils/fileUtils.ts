@@ -98,6 +98,30 @@ export const prepareImageForGemini = async (
   };
 };
 
+export const createImageFingerprint = async (file: File): Promise<string> => {
+  const image = await loadImage(file);
+  const size = 8;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error(`Could not create fingerprint canvas for ${file.name}.`);
+  }
+
+  ctx.drawImage(image, 0, 0, size, size);
+  const pixels = ctx.getImageData(0, 0, size, size).data;
+  const grayscaleValues: number[] = [];
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    grayscaleValues.push((pixels[i] * 0.299) + (pixels[i + 1] * 0.587) + (pixels[i + 2] * 0.114));
+  }
+
+  const average = grayscaleValues.reduce((sum, value) => sum + value, 0) / grayscaleValues.length;
+  return grayscaleValues.map((value) => (value >= average ? '1' : '0')).join('');
+};
+
 export const base64ToFile = (dataUrl: string, filename: string, mimeType: string, lastModified: number): File => {
   if (typeof dataUrl !== 'string') {
     throw new Error('base64ToFile expected a data URL string but received ' + typeof dataUrl);
