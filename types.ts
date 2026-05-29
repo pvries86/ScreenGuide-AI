@@ -6,6 +6,8 @@ export type TimeFormat = '12h' | '24h';
 
 export type GuideProfile = 'standard' | 'beginner' | 'technical' | 'training' | 'checklist' | 'support';
 
+export type ExportPreset = 'standard' | 'compact' | 'training';
+
 export interface GeminiModelOption {
   id: string;
   name: string;

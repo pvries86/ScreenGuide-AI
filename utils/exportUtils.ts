@@ -1,5 +1,5 @@
 
-import { InstructionStep } from '../types';
+import { ExportPreset, InstructionStep } from '../types';
 
 // These are globals from the scripts in index.html, so we extend the Window interface
 // to inform TypeScript about them and access them via the `window` object for clarity and safety.
@@ -122,7 +122,37 @@ const compressImageForDocx = async (
   };
 };
 
-export const exportToDocx = async (title: string, steps: InstructionStep[], images: File[]) => {
+const exportPresetConfig: Record<ExportPreset, {
+  imageWidth: number;
+  paragraphSpacing: number;
+  titleSpacing: number;
+  bodySize: number;
+  titleSize: number;
+}> = {
+  standard: {
+    imageWidth: 500,
+    paragraphSpacing: 200,
+    titleSpacing: 400,
+    bodySize: 24,
+    titleSize: 32,
+  },
+  compact: {
+    imageWidth: 420,
+    paragraphSpacing: 120,
+    titleSpacing: 240,
+    bodySize: 20,
+    titleSize: 28,
+  },
+  training: {
+    imageWidth: 540,
+    paragraphSpacing: 280,
+    titleSpacing: 480,
+    bodySize: 24,
+    titleSize: 36,
+  },
+};
+
+export const exportToDocx = async (title: string, steps: InstructionStep[], images: File[], preset: ExportPreset = 'standard') => {
   if (!window.docx || !window.saveAs) {
     console.error('docx or FileSaver library not loaded.');
     alert('DOCX export functionality is unavailable. Required libraries are missing.');
@@ -130,12 +160,13 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
   }
 
   const { Document, Packer, Paragraph, ImageRun, TextRun, HeadingLevel, AlignmentType } = window.docx;
+  const config = exportPresetConfig[preset];
 
   const titleParagraph = new Paragraph({
     text: title,
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
-    spacing: { after: 400 },
+    spacing: { after: config.titleSpacing },
   });
 
   let textStepCounter = 0;
@@ -147,7 +178,7 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
           new TextRun({ text: `${textStepCounter}. `, bold: true }),
           new TextRun({ text: step.content }),
         ],
-        spacing: { after: 200 },
+        spacing: { after: config.paragraphSpacing },
       });
     } else if (step.type === 'image') {
       const imageIndex = parseInt(step.content, 10) - 1;
@@ -156,7 +187,7 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
           const imageFile = images[imageIndex];
           const exportImage = await compressImageForDocx(imageFile);
           const aspectRatio = exportImage.width / exportImage.height;
-          const width = 500;
+          const width = config.imageWidth;
           const height = width / aspectRatio;
 
           return new Paragraph({
@@ -166,7 +197,7 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
                 transformation: { width, height },
               }),
             ],
-            spacing: { after: 200 },
+            spacing: { after: config.paragraphSpacing },
           });
         } catch (e) {
           console.error('Error reading image for DOCX export', e);
@@ -186,13 +217,13 @@ export const exportToDocx = async (title: string, steps: InstructionStep[], imag
         document: {
           run: {
             font: "Calibri",
-            size: 24, // 12pt
+            size: config.bodySize,
           },
         },
         heading1: {
             run: {
                 font: "Calibri",
-                size: 32, // 16pt
+                size: config.titleSize,
                 bold: true,
             }
         }

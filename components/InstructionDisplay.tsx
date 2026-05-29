@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { InstructionStep, RegenerationMode } from '../types';
+import { ExportPreset, InstructionStep, RegenerationMode } from '../types';
 import { exportToDocx, exportToPdf } from '../utils/exportUtils';
 import { 
     DocxIcon, PdfIcon, LoadingIcon, EditIcon, RefreshIcon, 
@@ -37,6 +37,33 @@ const EmptyState: React.FC = () => (
         <p className="mt-2 text-slate-500 dark:text-slate-400">Upload your screenshots and click "Generate" to start.</p>
     </div>
 );
+
+const exportPresets: { id: ExportPreset; name: string }[] = [
+    { id: 'standard', name: 'Standard' },
+    { id: 'compact', name: 'Compact' },
+    { id: 'training', name: 'Training' },
+];
+
+const exportPresetClasses: Record<ExportPreset, { container: string; title: string; content: string; image: string }> = {
+    standard: {
+        container: 'p-8',
+        title: 'text-3xl !mb-8',
+        content: 'space-y-6',
+        image: 'my-6',
+    },
+    compact: {
+        container: 'p-6',
+        title: 'text-2xl !mb-5',
+        content: 'space-y-4',
+        image: 'my-4',
+    },
+    training: {
+        container: 'p-10',
+        title: 'text-4xl !mb-10',
+        content: 'space-y-8',
+        image: 'my-8',
+    },
+};
 
 const StepEditor: React.FC<{
     step: InstructionStep;
@@ -166,6 +193,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
     const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [exportPreset, setExportPreset] = useState<ExportPreset>('standard');
 
     const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null);
 
@@ -207,7 +235,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
         if (displayRef.current) exportToPdf(displayRef.current, generateFilename(title));
     };
     
-    const handleExportDocx = () => { exportToDocx(title, steps, images); };
+    const handleExportDocx = () => { exportToDocx(title, steps, images, exportPreset); };
     
     const handleDeleteBlock = (index: number) => {
         if (window.confirm('Are you sure you want to delete this step and all its associated images?')) onDeleteStep(index);
@@ -298,25 +326,38 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
     if (steps.length === 0) return <EmptyState />;
 
     let textStepCounter = 0;
+    const exportClasses = exportPresetClasses[exportPreset];
 
     return (
         <div>
             <div className="flex items-center justify-between mb-4 gap-4">
                 <input type="text" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Procedure Title" className="text-2xl font-bold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-700 rounded-md -ml-2 p-2 w-full border border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" aria-label="Procedure Title" />
                 <div className="flex items-center space-x-2 flex-shrink-0">
+                    <select
+                        value={exportPreset}
+                        onChange={(event) => setExportPreset(event.target.value as ExportPreset)}
+                        className="px-3 py-2 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        aria-label="Export preset"
+                    >
+                        {exportPresets.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                                {preset.name}
+                            </option>
+                        ))}
+                    </select>
                     <button onClick={handleExportDocx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><DocxIcon />DOCX</button>
                     <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><PdfIcon />PDF</button>
                 </div>
             </div>
-            <div ref={displayRef} className="p-8 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/50 prose dark:prose-invert max-w-none">
-                <h1 className="text-3xl font-bold !text-center !mb-8 !text-slate-900 dark:!text-slate-100">{title}</h1>
+            <div ref={displayRef} className={`${exportClasses.container} border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/50 prose dark:prose-invert max-w-none`}>
+                <h1 className={`${exportClasses.title} font-bold !text-center !text-slate-900 dark:!text-slate-100`}>{title}</h1>
                 {selectedIndices.length > 1 && (
                     <div className="sticky top-2 z-20 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-2 rounded-lg shadow-lg border border-primary flex items-center justify-between mb-4">
                         <span className="font-semibold text-primary px-2">{selectedIndices.length} steps selected</span>
                         <button onClick={handleMerge} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition-colors"><CombineIcon />Merge Selected</button>
                     </div>
                 )}
-                <div className="space-y-6">
+                <div className={exportClasses.content}>
                     <Inserter 
                         isVisible={hoveredInsertIndex === -1}
                         onHover={() => setHoveredInsertIndex(-1)}
@@ -388,7 +429,7 @@ export const InstructionDisplay: React.FC<InstructionDisplayProps> = ({
                                                     const stepIndexInMainArray = block.textStepIndex + 1 + imgIdx;
                                                     if (imageIndex >= 0 && imageIndex < imageUrls.length) {
                                                         return (
-                                                            <div key={`${block.textStepIndex}-${imgIdx}`} className="my-6 relative group/image">
+                                                            <div key={`${block.textStepIndex}-${imgIdx}`} className={`${exportClasses.image} relative group/image`}>
                                                                 <img src={imageUrls[imageIndex]} alt={`Screenshot for step ${textStepCounter}`} className="w-full max-w-2xl mx-auto rounded-lg shadow-md border border-slate-200 dark:border-slate-700" />
                                                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
                                                                     <button onClick={() => onAnnotateImage(imageIndex)} className="flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform"><AnnotateIcon className="w-5 h-5" />Annotate</button>
