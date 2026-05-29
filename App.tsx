@@ -9,7 +9,7 @@ import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { DEFAULT_GEMINI_MODEL, generateInstructions, listGeminiModels, regenerateInstruction, generateIncrementalInstruction } from './services/geminiService';
 import * as db from './services/dbService';
-import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, GeminiModelOption } from './types';
+import { Language, InstructionStep, RegenerationMode, SavedSession, SessionData, ExportedSession, Theme, ExportedImage, TimeFormat, GeminiModelOption, GuideProfile } from './types';
 import { GenerateIcon, SaveIcon, MergeIcon, UndoIcon, RedoIcon, LoadingIcon } from './components/icons';
 import { base64ToFile } from './utils/fileUtils';
 import { useHistory } from './hooks/useHistory';
@@ -41,6 +41,15 @@ type GenerationStatus = {
   total?: number;
   canCancel: boolean;
 };
+
+const guideProfiles: { id: GuideProfile; name: string }[] = [
+  { id: 'standard', name: 'Standard SOP' },
+  { id: 'beginner', name: 'Beginner' },
+  { id: 'technical', name: 'Technical SOP' },
+  { id: 'training', name: 'Training handout' },
+  { id: 'checklist', name: 'Quick checklist' },
+  { id: 'support', name: 'Support article' },
+];
 
 const POINTER_SVG_PATH = 'M16.5744 19.1999L12.6361 15.2616L11.4334 16.4643C10.2022 17.6955 9.58656 18.3111 8.92489 18.1658C8.26322 18.0204 7.96225 17.2035 7.3603 15.5696L5.3527 10.1205C4.15187 6.86106 3.55146 5.23136 4.39141 4.39141C5.23136 3.55146 6.86106 4.15187 10.1205 5.35271L15.5696 7.3603C17.2035 7.96225 18.0204 8.26322 18.1658 8.92489C18.3111 9.58656 17.6955 10.2022 16.4643 11.4334L15.2616 12.6361L19.1999 16.5744C19.6077 16.9821 19.8116 17.186 19.9058 17.4135C20.0314 17.7168 20.0314 18.0575 19.9058 18.3608C19.8116 18.5882 19.6077 18.7921 19.1999 19.1999C18.7921 19.6077 18.5882 19.8116 18.3608 19.9058C18.0575 20.0314 17.7168 20.0314 17.4135 19.9058C17.186 19.8116 16.9821 19.6077 16.5744 19.1999Z';
 
@@ -195,6 +204,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   // FIX: Add language state for internationalization.
   const [language, setLanguage] = useState<Language>('en');
+  const [guideProfile, setGuideProfile] = useState<GuideProfile>('standard');
   
   const isElectronEnv = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const generationAbortControllerRef = useRef<AbortController | null>(null);
@@ -310,6 +320,11 @@ const App: React.FC = () => {
     const savedTimeFormat = localStorage.getItem('time-format') as TimeFormat | null;
     if (savedTimeFormat) setTimeFormat(savedTimeFormat);
 
+    const savedGuideProfile = localStorage.getItem('guide-profile') as GuideProfile | null;
+    if (savedGuideProfile && guideProfiles.some((profile) => profile.id === savedGuideProfile)) {
+      setGuideProfile(savedGuideProfile);
+    }
+
     const savedApiKey = localStorage.getItem('gemini-api-key');
     if (savedApiKey) {
       setApiKey(savedApiKey);
@@ -332,6 +347,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('time-format', timeFormat);
   }, [timeFormat]);
+
+  useEffect(() => {
+    localStorage.setItem('guide-profile', guideProfile);
+  }, [guideProfile]);
 
   const handleApiKeySave = (newKey: string) => {
     setApiKey(newKey);
@@ -822,7 +841,8 @@ const App: React.FC = () => {
         { previousStep, currentStep: currentStep.content, nextStep },
         mode,
         apiKey,
-        selectedModel
+        selectedModel,
+        guideProfile
       );
       return newContent;
 
@@ -873,7 +893,8 @@ const App: React.FC = () => {
           current: images.length,
           total: images.length,
           canCancel: true,
-        })
+        }),
+        guideProfile
       );
       setGenerationStatus({
         mode: 'generate',
@@ -983,7 +1004,8 @@ const App: React.FC = () => {
               context,
               selectedModel,
               abortController.signal,
-              undefined
+              undefined,
+              guideProfile
             );
             throwIfAborted(abortController.signal);
             const processedSteps = result.steps.map(step => step.type === 'image' ? { ...step, content: String(index + 1) } : step);
@@ -1083,7 +1105,24 @@ const App: React.FC = () => {
                         </div>
                     )}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <LanguageToggle language={language} onLanguageChange={setLanguage} />
+                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                            <LanguageToggle language={language} onLanguageChange={setLanguage} />
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Profile
+                                <select
+                                    value={guideProfile}
+                                    onChange={(event) => setGuideProfile(event.target.value as GuideProfile)}
+                                    disabled={isAiOperationActive}
+                                    className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-700 disabled:cursor-not-allowed"
+                                >
+                                    {guideProfiles.map((profile) => (
+                                        <option key={profile.id} value={profile.id}>
+                                            {profile.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                             <button onClick={undo} disabled={!canUndo} className="flex items-center justify-center gap-2 px-3 py-3 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all" title="Undo (Ctrl+Z)"><UndoIcon className="w-5 h-5" /></button>
                             <button onClick={redo} disabled={!canRedo} className="flex items-center justify-center gap-2 px-3 py-3 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-semibold rounded-lg shadow-sm hover:bg-slate-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all" title="Redo (Ctrl+Y)"><RedoIcon className="w-5 h-5" /></button>

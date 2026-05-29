@@ -4,6 +4,8 @@ export type Theme = 'light' | 'dark';
 
 export type TimeFormat = '12h' | '24h';
 
+export type GuideProfile = 'standard' | 'beginner' | 'technical' | 'training' | 'checklist' | 'support';
+
 export interface GeminiModelOption {
   id: string;
   name: string;

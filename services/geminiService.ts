@@ -1,5 +1,5 @@
 import { fileToBase64 } from '../utils/fileUtils';
-import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep, GeminiModelOption } from '../types';
+import { Language, SopOutput, RegenerationMode, IncrementalSopOutput, InstructionStep, GeminiModelOption, GuideProfile } from '../types';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -47,6 +47,17 @@ const languageMap: Record<Language, string> = {
   de: 'German',
   li: 'Limburgish',
 };
+
+const guideProfileInstructions: Record<GuideProfile, string> = {
+  standard: 'Write clear, concise SOP instructions for a general business audience.',
+  beginner: 'Write beginner-friendly instructions. Avoid unexplained jargon, include small orientation details, and make each action easy to follow.',
+  technical: 'Write precise technical SOP instructions. Use exact UI labels where visible, preserve important technical terms, and avoid oversimplifying.',
+  training: 'Write training handout instructions. Use a supportive tone, explain why key actions matter when it is visually inferable, and keep steps easy to scan.',
+  checklist: 'Write compact checklist-style instructions. Prefer short imperative actions and avoid extra explanation unless needed for clarity.',
+  support: 'Write support-article instructions. Focus on the user problem, expected outcome, and clear recovery-oriented actions.',
+};
+
+const getGuideProfileInstruction = (profile: GuideProfile): string => guideProfileInstructions[profile] ?? guideProfileInstructions.standard;
 
 const normalizeModelId = (name: string): string => name.replace(/^models\//, '');
 
@@ -239,13 +250,16 @@ export const generateInstructions = async (
   apiKey: string,
   model: string = DEFAULT_GEMINI_MODEL,
   signal?: AbortSignal,
-  onRequestStart?: () => void
+  onRequestStart?: () => void,
+  profile: GuideProfile = 'standard'
 ): Promise<SopOutput> => {
   const languageName = languageMap[language];
+  const profileInstruction = getGuideProfileInstruction(profile);
 
   const prompt = `You are an expert technical writer specializing in creating clear, concise Standard Operating Procedures (SOPs). Your task is to analyze the following sequence of screenshots and generate a step-by-step guide.
 First, create a short, descriptive title for the overall process shown in the screenshots.
 Then, generate the steps. The instructions must be derived solely from the visual information in the images. The output language must be ${languageName}.
+Style profile: ${profileInstruction}
 Pay special attention to any on-screen annotations like red boxes or arrows, as they highlight the most important elements for the user to interact with. Your instruction should explicitly mention these highlighted elements (e.g., "Click the 'Save' button, highlighted in the red box.").
 You must return the a single JSON object that strictly adheres to the provided schema, containing both the title and the array of steps. Each step can be either a text instruction or a reference to an image. For text, use the type 'text' and provide the instruction in the 'content' field. To include an image, use the type 'image' and set the 'content' to the 1-based index of the corresponding screenshot in the sequence. Ensure the image references are placed logically after the text step they illustrate.`;
 
@@ -323,12 +337,15 @@ export const generateIncrementalInstruction = async (
     context: { previousStep: string | null; nextStep: string | null },
     model: string = DEFAULT_GEMINI_MODEL,
     signal?: AbortSignal,
-    onRequestStart?: () => void
+    onRequestStart?: () => void,
+    profile: GuideProfile = 'standard'
 ): Promise<IncrementalSopOutput> => {
     const languageName = languageMap[language];
+    const profileInstruction = getGuideProfileInstruction(profile);
     const { previousStep, nextStep } = context;
 
     let prompt = `You are an expert technical writer. Your task is to write a single, clear instruction for the provided screenshot, which is a new step being inserted into an existing guide. The output language must be ${languageName}.
+Style profile: ${profileInstruction}
 The screenshot may have annotations like red boxes or arrows; your instruction should reference them.
 Your generated instruction must logically connect the previous and next steps in the guide.`;
 
@@ -391,9 +408,11 @@ export const regenerateInstruction = async (
   },
   mode: RegenerationMode = 'regenerate',
   apiKey: string,
-  model: string = DEFAULT_GEMINI_MODEL
+  model: string = DEFAULT_GEMINI_MODEL,
+  profile: GuideProfile = 'standard'
 ): Promise<string> => {
   const languageName = languageMap[language];
+  const profileInstruction = getGuideProfileInstruction(profile);
   const { previousStep, currentStep, nextStep } = context;
 
   let modificationInstruction = '';
@@ -418,7 +437,7 @@ export const regenerateInstruction = async (
       break;
   }
 
-  let prompt = `You are an expert technical writer. Your task is to rewrite a single instruction step. The new instruction must be in ${languageName}.`;
+  let prompt = `You are an expert technical writer. Your task is to rewrite a single instruction step. The new instruction must be in ${languageName}. Style profile: ${profileInstruction}`;
 
   if (image) {
     prompt += ` The instruction should be based on the provided screenshot. The screenshot may contain annotations like red boxes or arrows highlighting the key element. Refer to these highlights in your rewritten instruction.`;
