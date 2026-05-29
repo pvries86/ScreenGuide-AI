@@ -32,6 +32,7 @@ export interface SessionData {
   title: string;
   steps: InstructionStep[];
   images: File[];
+  tags?: string[];
 }
 
 export interface SavedSession extends SessionData {
@@ -52,4 +53,5 @@ export interface ExportedSession {
     title: string;
     steps: InstructionStep[];
     images: ExportedImage[];
+    tags?: string[];
 }

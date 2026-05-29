@@ -9,6 +9,7 @@ interface SessionManagerProps {
   onLoad: (id: number) => void;
   onDelete: (id: number) => void;
   onSaveAs: (id: number) => void;
+  onTagsChange: (id: number, tags: string[]) => void;
   onImport: (file: File) => void;
   onExport: () => void;
   isExportDisabled: boolean;
@@ -16,11 +17,12 @@ interface SessionManagerProps {
   timeFormat: TimeFormat;
 }
 
-export const SessionManager: React.FC<SessionManagerProps> = ({ 
-    sessions, currentSessionId, onNew, onLoad, onDelete, onSaveAs, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
+export const SessionManager: React.FC<SessionManagerProps> = ({
+    sessions, currentSessionId, onNew, onLoad, onDelete, onSaveAs, onTagsChange, onImport, onExport, isExportDisabled, onSettingsClick, timeFormat
 }) => {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [version, setVersion] = useState<string>('...');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -67,6 +69,25 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   };
 
+  const filteredSessions = sessions.filter((session) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    const title = (session.title || 'Untitled Session').toLowerCase();
+    const tags = (session.tags ?? []).join(' ').toLowerCase();
+    return title.includes(query) || tags.includes(query);
+  });
+
+  const parseTags = (value: string): string[] => {
+    return value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .filter((tag, index, allTags) => allTags.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index);
+  };
+
   return (
     <aside className="w-full md:w-72 flex-shrink-0 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0">
       <div className="flex items-center gap-3 h-16 border-b border-slate-200 dark:border-slate-800 px-4 flex-shrink-0">
@@ -110,10 +131,20 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
       <div className="flex-grow overflow-y-auto px-2">
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1">Saved Sessions</h2>
-        {sessions.length > 0 ? (
+        <div className="px-2 pb-2">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search sessions or tags"
+            className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-slate-900 dark:text-slate-100"
+          />
+        </div>
+        {filteredSessions.length > 0 ? (
           <ul className="space-y-1">
-            {sessions.map((session) => {
+            {filteredSessions.map((session) => {
               const wasModified = session.modifiedAt && (new Date(session.modifiedAt).getTime() > new Date(session.createdAt).getTime() + 5000); // 5s buffer
+              const tags = session.tags ?? [];
               return (
                 <li key={session.id}>
                   <div 
@@ -159,11 +190,38 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                           </span>
                         )}
                     </div>
+                    {tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {tags.map((tag) => (
+                          <span key={tag} className="px-2 py-0.5 text-xs rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      defaultValue={tags.join(', ')}
+                      onClick={(event) => event.stopPropagation()}
+                      onBlur={(event) => onTagsChange(session.id, parseTags(event.target.value))}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      placeholder="Tags"
+                      className="mt-2 w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-slate-100"
+                      aria-label={`Tags for ${session.title || 'Untitled Session'}`}
+                    />
                   </div>
                 </li>
               );
             })}
           </ul>
+        ) : sessions.length > 0 ? (
+          <div className="text-center text-sm text-slate-500 dark:text-slate-400 p-4 mt-4">
+            No sessions match your search.
+          </div>
         ) : (
           <div className="text-center text-sm text-slate-500 dark:text-slate-400 p-4 mt-4">
             No saved sessions yet. <br/> Click "Save" in the editor to keep a copy of your work.

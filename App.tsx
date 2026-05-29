@@ -566,10 +566,10 @@ const App: React.FC = () => {
       if (currentSessionId) {
         const existingSession = sessions.find(s => s.id === currentSessionId);
         if (existingSession) {
-          await db.updateSession({ ...sessionData, id: currentSessionId, createdAt: existingSession.createdAt, modifiedAt: new Date() });
+          await db.updateSession({ ...sessionData, tags: existingSession.tags ?? [], id: currentSessionId, createdAt: existingSession.createdAt, modifiedAt: new Date() });
         }
       } else {
-        const newId = await db.addSession(sessionData);
+        const newId = await db.addSession({ ...sessionData, tags: [] });
         setCurrentSessionId(newId);
       }
       await loadSessions();
@@ -617,7 +617,23 @@ const App: React.FC = () => {
       setError(`Failed to delete session ${id}.`);
     }
   };
-  
+
+  const handleUpdateSessionTags = async (id: number, tags: string[]) => {
+    setError(null);
+    try {
+      const session = await db.getSession(id);
+      if (!session) {
+        throw new Error("Session not found in the database.");
+      }
+
+      await db.updateSession({ ...session, tags, modifiedAt: new Date() });
+      await loadSessions();
+    } catch (e) {
+      console.error(e);
+      setError(`Failed to update tags for session ${id}.`);
+    }
+  };
+
   const handleSaveAsSession = async (id: number) => {
     setError(null);
     try {
@@ -633,6 +649,7 @@ const App: React.FC = () => {
                 title: newTitle,
                 steps: sessionToDuplicate.steps,
                 images: sessionToDuplicate.images,
+                tags: sessionToDuplicate.tags ?? [],
             };
             await db.addSession(newSessionData);
             await loadSessions();
@@ -651,7 +668,8 @@ const App: React.FC = () => {
 
     try {
       const exportedImages = await convertFilesToExportedImages(images);
-      const exportedSession: ExportedSession = { title, steps: instructionSteps, images: exportedImages };
+      const currentSession = sessions.find((session) => session.id === currentSessionId);
+      const exportedSession: ExportedSession = { title, steps: instructionSteps, images: exportedImages, tags: currentSession?.tags ?? [] };
       const jsonString = JSON.stringify(exportedSession, null, 2);
       const filename = (title || 'untitled-session').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const blob = new Blob([jsonString], { type: 'application/json' });
@@ -673,7 +691,7 @@ const App: React.FC = () => {
         
         const importedImages = parsed.images.map(imgData => base64ToFile(imgData.data, imgData.name, imgData.type, imgData.lastModified));
         
-        const newSessionData: SessionData = { title: parsed.title, steps: parsed.steps, images: importedImages };
+        const newSessionData: SessionData = { title: parsed.title, steps: parsed.steps, images: importedImages, tags: parsed.tags ?? [] };
         const newId = await db.addSession(newSessionData);
         await loadSessions();
         await handleLoadSession(newId);
@@ -1245,7 +1263,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex w-full min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-200">
-      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onSaveAs={handleSaveAsSession} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} timeFormat={timeFormat} />
+      <SessionManager sessions={sessions} currentSessionId={currentSessionId} onNew={handleNewSession} onLoad={handleLoadSession} onDelete={handleDeleteSession} onSaveAs={handleSaveAsSession} onTagsChange={handleUpdateSessionTags} onImport={handleImportSession} onExport={handleExportSession} isExportDisabled={!currentSessionId} onSettingsClick={() => setIsSettingsOpen(true)} timeFormat={timeFormat} />
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto p-4 md:p-8">
             <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
