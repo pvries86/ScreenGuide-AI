@@ -191,6 +191,8 @@ const App: React.FC = () => {
   // File State (not part of undo/redo history)
   const [images, setImages] = useState<File[]>([]);
   const [duplicateImageGroups, setDuplicateImageGroups] = useState<number[][]>([]);
+  const [recordingReviewImages, setRecordingReviewImages] = useState<File[]>([]);
+  const [recordingReviewImageUrls, setRecordingReviewImageUrls] = useState<string[]>([]);
   
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -287,6 +289,15 @@ const App: React.FC = () => {
       isCancelled = true;
     };
   }, [images]);
+
+  useEffect(() => {
+    const urls = recordingReviewImages.map((file) => URL.createObjectURL(file));
+    setRecordingReviewImageUrls(urls);
+
+    return () => {
+      urls.forEach(URL.revokeObjectURL);
+    };
+  }, [recordingReviewImages]);
 
   useEffect(() => {
     return () => {
@@ -782,20 +793,41 @@ const App: React.FC = () => {
     setError(null);
   }, [duplicateImageGroups]);
 
-  const appendImageToQueue = useCallback((file: File) => {
-    if (instructionSteps.length === 0) {
-      resetDocumentState({ title: '', steps: [] });
-    }
-
-    setImages(prev => [...prev, file]);
+  const appendRecordingReviewImage = useCallback((file: File) => {
+    setRecordingReviewImages((currentImages) => [...currentImages, file]);
     setError(null);
+  }, []);
+
+  const acceptRecordingReviewImages = useCallback((indices?: number[]) => {
+    setRecordingReviewImages((currentImages) => {
+      const acceptedIndices = new Set(indices ?? currentImages.map((_, index) => index));
+      const acceptedImages = currentImages.filter((_, index) => acceptedIndices.has(index));
+      const remainingImages = currentImages.filter((_, index) => !acceptedIndices.has(index));
+
+      if (acceptedImages.length > 0) {
+        if (instructionSteps.length === 0) {
+          resetDocumentState({ title: '', steps: [] });
+        }
+
+        setImages((queuedImages) => [...queuedImages, ...acceptedImages]);
+      }
+
+      return remainingImages;
+    });
   }, [instructionSteps.length, resetDocumentState]);
 
-  const appendImageToQueueRef = useRef(appendImageToQueue);
+  const discardRecordingReviewImages = useCallback((indices?: number[]) => {
+    setRecordingReviewImages((currentImages) => {
+      const discardedIndices = new Set(indices ?? currentImages.map((_, index) => index));
+      return currentImages.filter((_, index) => !discardedIndices.has(index));
+    });
+  }, []);
+
+  const appendRecordingReviewImageRef = useRef(appendRecordingReviewImage);
 
   useEffect(() => {
-    appendImageToQueueRef.current = appendImageToQueue;
-  }, [appendImageToQueue]);
+    appendRecordingReviewImageRef.current = appendRecordingReviewImage;
+  }, [appendRecordingReviewImage]);
 
   useEffect(() => {
     if (!isElectronEnv || !window.electronAPI?.onNativeRecordingState) {
@@ -831,7 +863,7 @@ const App: React.FC = () => {
       }
 
       const file = base64ToFile(annotatedDataUrl as string, filename, 'image/png', timestamp);
-      appendImageToQueueRef.current(file);
+      appendRecordingReviewImageRef.current(file);
     } catch (error) {
       console.error('Automatic screenshot capture failed', error);
       setError(prev => prev ?? 'Failed to automatically capture a screenshot. Please try again.');
@@ -904,7 +936,7 @@ const App: React.FC = () => {
         const timestamp = Date.now();
         const filename = `screenguide-${new Date(timestamp).toISOString().replace(/[:.]/g, '-')}.png`;
         const file = base64ToFile(dataUrl, filename, 'image/png', timestamp);
-        appendImageToQueueRef.current(file);
+        appendRecordingReviewImageRef.current(file);
       } catch (error) {
         console.error('Automatic screenshot capture failed', error);
         setError(prev => prev ?? 'Failed to automatically capture a screenshot. Please try again.');
@@ -1257,6 +1289,55 @@ const App: React.FC = () => {
                             >
                                 {isRecording ? 'Stop recording' : 'Start recording'}
                             </button>
+                        </div>
+                    )}
+                    {recordingReviewImages.length > 0 && (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                                <div>
+                                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Review captured screenshots</h3>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">Accept useful automatic captures before adding them to the queue.</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => discardRecordingReviewImages()}
+                                        className="px-3 py-2 text-sm font-semibold rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                    >
+                                        Discard all
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => acceptRecordingReviewImages()}
+                                        className="px-3 py-2 text-sm font-semibold rounded-md bg-primary text-white hover:bg-secondary"
+                                    >
+                                        Accept all
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                                {recordingReviewImages.map((file, index) => (
+                                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 group">
+                                        <img src={recordingReviewImageUrls[index]} alt={`Captured screenshot ${index + 1}`} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 p-2 bg-black/60 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                            <button
+                                                type="button"
+                                                onClick={() => discardRecordingReviewImages([index])}
+                                                className="px-2 py-1 text-xs font-semibold rounded bg-white/90 text-slate-800 hover:bg-white"
+                                            >
+                                                Discard
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => acceptRecordingReviewImages([index])}
+                                                className="px-2 py-1 text-xs font-semibold rounded bg-primary text-white hover:bg-secondary"
+                                            >
+                                                Accept
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
